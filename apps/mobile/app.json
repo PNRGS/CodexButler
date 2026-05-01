@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Concierge",
+    "slug": "concierge",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "concierge",
+    "userInterfaceStyle": "automatic",
+    "plugins": [
+      "expo-router",
+      "expo-font"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "ios": {
+      "supportsTablet": false
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0f172a"
+      }
+    }
+  }
+}

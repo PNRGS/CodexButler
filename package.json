@@ -1,0 +1,24 @@
+{
+  "name": "concierge",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "dev": "pnpm --parallel --filter @concierge/backend --filter @concierge/mobile dev",
+    "dev:backend": "pnpm --filter @concierge/backend dev",
+    "dev:mobile": "pnpm --filter @concierge/mobile dev",
+    "mock:approval": "pnpm --filter @concierge/backend mock:approval",
+    "lint": "pnpm --recursive lint",
+    "typecheck": "pnpm --recursive typecheck",
+    "test": "pnpm --recursive test"
+  },
+  "pnpm": {
+    "overrides": {
+      "postcss": "^8.5.10"
+    }
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "typescript": "^5.7.3"
+  }
+}

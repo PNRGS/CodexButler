@@ -1,0 +1,44 @@
+# Dependencies
+node_modules/
+
+# Build and cache output
+dist/
+coverage/
+.turbo/
+*.tsbuildinfo
+
+# Expo / React Native local state
+.expo/
+.expo-shared/
+web-build/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p8
+*.p12
+*.jks
+*.keystore
+*.mobileprovision
+google-services.json
+GoogleService-Info.plist
+
+# Runtime data, logs, and local databases
+*.log
+*.sqlite
+*.sqlite-*
+*.db
+*.db-*
+concierge-mobile-approval-test.txt
+
+# Generated protocol snapshots
+.codex-protocol/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
