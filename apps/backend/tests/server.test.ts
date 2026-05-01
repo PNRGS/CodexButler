@@ -15,6 +15,7 @@ function testConfig(sqlitePath: string): AppConfig {
     BACKEND_HOST: "127.0.0.1",
     BACKEND_PORT: 4545,
     BACKEND_PUBLIC_BIND: false,
+    BACKEND_ALLOWED_ORIGINS: [],
     BACKEND_AUTH_TOKEN: "test-token-for-concierge",
     CODEX_BIN: "codex",
     CODEX_MOCK_MODE: true,
@@ -147,7 +148,18 @@ describe("backend server", () => {
 
     const health = await app.inject({ method: "GET", url: "/health" });
     expect(health.statusCode).toBe(200);
-    expect(health.json().session).toMatchObject({
+    expect(health.json()).toEqual({ ok: true });
+
+    const deniedSession = await app.inject({ method: "GET", url: "/session" });
+    expect(deniedSession.statusCode).toBe(401);
+
+    const session = await app.inject({
+      method: "GET",
+      url: "/session",
+      headers: { authorization: "Bearer test-token-for-concierge" }
+    });
+    expect(session.statusCode).toBe(200);
+    expect(session.json().session).toMatchObject({
       codexConnected: true,
       mockMode: true,
       codexConnectionMode: "mock",
@@ -163,6 +175,36 @@ describe("backend server", () => {
       headers: { authorization: "Bearer test-token-for-concierge" }
     });
     expect(allowed.statusCode).toBe(200);
+
+    await app.close();
+    auditStore.close();
+  });
+
+  it("restricts CORS origins when public binding is enabled", async () => {
+    const temp = mkdtempSync(join(tmpdir(), "concierge-"));
+    const config = {
+      ...testConfig(join(temp, "test.sqlite")),
+      BACKEND_PUBLIC_BIND: true,
+      BACKEND_ALLOWED_ORIGINS: ["https://allowed.example"]
+    };
+    const auditStore = await AuditStore.open(config.SQLITE_PATH);
+    const codex = new MockCodexRepository();
+    await codex.connect();
+    const app = buildServer({ config, codex, auditStore });
+
+    const allowed = await app.inject({
+      method: "GET",
+      url: "/health",
+      headers: { origin: "https://allowed.example" }
+    });
+    expect(allowed.headers["access-control-allow-origin"]).toBe("https://allowed.example");
+
+    const blocked = await app.inject({
+      method: "GET",
+      url: "/health",
+      headers: { origin: "https://evil.example" }
+    });
+    expect(blocked.headers["access-control-allow-origin"]).toBeUndefined();
 
     await app.close();
     auditStore.close();
@@ -219,6 +261,90 @@ describe("backend server", () => {
       headers: { authorization: "Bearer test-token-for-concierge" }
     });
     expect(approvals.json()).toMatchObject({ data: [] });
+
+    await app.close();
+    auditStore.close();
+  });
+
+  it("rejects unavailable approval decisions before resolving", async () => {
+    const temp = mkdtempSync(join(tmpdir(), "concierge-"));
+    const config = testConfig(join(temp, "test.sqlite"));
+    const auditStore = await AuditStore.open(config.SQLITE_PATH);
+    const codex = new SpecialCharacterApprovalRepository();
+    await codex.connect();
+    const app = buildServer({ config, codex, auditStore });
+
+    const result = await app.inject({
+      method: "POST",
+      url: "/approvals/decision",
+      headers: { authorization: "Bearer test-token-for-concierge" },
+      payload: { approvalId: "thread:turn:item", decision: "deny" }
+    });
+    expect(result.statusCode).toBe(400);
+    expect((await codex.listApprovals()).map((approval) => approval.id)).toEqual(["thread:turn:item"]);
+
+    await app.close();
+    auditStore.close();
+  });
+
+  it("rejects approval rule prefixes that do not match the proposed rule", async () => {
+    const temp = mkdtempSync(join(tmpdir(), "concierge-"));
+    const config = testConfig(join(temp, "test.sqlite"));
+    const auditStore = await AuditStore.open(config.SQLITE_PATH);
+    const codex = new MockCodexRepository();
+    await codex.connect();
+    const app = buildServer({ config, codex, auditStore });
+
+    const result = await app.inject({
+      method: "POST",
+      url: "/approvals/mock-approval-1/decision",
+      headers: { authorization: "Bearer test-token-for-concierge" },
+      payload: { decision: "alwaysAllowRule", rulePrefix: ["rm", "-rf", "/"] }
+    });
+    expect(result.statusCode).toBe(400);
+    expect((await codex.listApprovals()).map((approval) => approval.id)).toEqual(["mock-approval-1"]);
+
+    await app.close();
+    auditStore.close();
+  });
+
+  it("rejects rule prefixes on non-rule approval decisions", async () => {
+    const temp = mkdtempSync(join(tmpdir(), "concierge-"));
+    const config = testConfig(join(temp, "test.sqlite"));
+    const auditStore = await AuditStore.open(config.SQLITE_PATH);
+    const codex = new MockCodexRepository();
+    await codex.connect();
+    const app = buildServer({ config, codex, auditStore });
+
+    const result = await app.inject({
+      method: "POST",
+      url: "/approvals/mock-approval-1/decision",
+      headers: { authorization: "Bearer test-token-for-concierge" },
+      payload: { decision: "approveOnce", rulePrefix: [] }
+    });
+    expect(result.statusCode).toBe(400);
+    expect((await codex.listApprovals()).map((approval) => approval.id)).toEqual(["mock-approval-1"]);
+
+    await app.close();
+    auditStore.close();
+  });
+
+  it("accepts always-allow only with the proposed rule prefix", async () => {
+    const temp = mkdtempSync(join(tmpdir(), "concierge-"));
+    const config = testConfig(join(temp, "test.sqlite"));
+    const auditStore = await AuditStore.open(config.SQLITE_PATH);
+    const codex = new MockCodexRepository();
+    await codex.connect();
+    const app = buildServer({ config, codex, auditStore });
+
+    const result = await app.inject({
+      method: "POST",
+      url: "/approvals/mock-approval-1/decision",
+      headers: { authorization: "Bearer test-token-for-concierge" },
+      payload: { decision: "alwaysAllowRule", rulePrefix: ["pnpm", "install"] }
+    });
+    expect(result.statusCode).toBe(202);
+    expect((await codex.listApprovals()).map((approval) => approval.id)).toEqual([]);
 
     await app.close();
     auditStore.close();

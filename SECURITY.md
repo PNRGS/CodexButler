@@ -10,6 +10,7 @@ This repository currently targets a local-network MVP:
 - Codex credentials and execution stay on that backend host;
 - the mobile app talks only to the Concierge backend;
 - the backend must not expose unauthenticated command or approval endpoints.
+- public health checks must not expose local paths, Codex diagnostics, or session details.
 
 ## Do Not Commit
 
@@ -31,3 +32,5 @@ Do not include secrets, tokens, private repository names, or personal filesystem
 ## Deployment Guidance
 
 For the MVP, keep the backend LAN-only. For remote access, use a private VPN or authenticated private tunnel. Do not expose raw Codex app-server endpoints directly to the internet.
+
+When `BACKEND_PUBLIC_BIND=true`, set `BACKEND_ALLOWED_ORIGINS` only for browser clients that need CORS. Native mobile clients can call the backend without opening browser origins.

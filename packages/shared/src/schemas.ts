@@ -117,6 +117,10 @@ export const backendSessionSchema = z.object({
 });
 
 export const healthResponseSchema = z.object({
+  ok: z.boolean()
+});
+
+export const sessionResponseSchema = z.object({
   ok: z.boolean(),
   session: backendSessionSchema
 });

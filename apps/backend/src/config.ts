@@ -9,6 +9,15 @@ const envSchema = z.object({
     .string()
     .default("false")
     .transform((value) => value === "true"),
+  BACKEND_ALLOWED_ORIGINS: z
+    .string()
+    .default("")
+    .transform((value) =>
+      value
+        .split(",")
+        .map((origin) => origin.trim())
+        .filter(Boolean)
+    ),
   BACKEND_AUTH_TOKEN: z.string().min(32, "BACKEND_AUTH_TOKEN must be at least 32 characters"),
   CODEX_BIN: z.string().default("codex"),
   CODEX_MOCK_MODE: z

@@ -79,6 +79,7 @@ export class AuditStore {
       );
     `);
     this.ensureApprovalDecisionColumns();
+    this.scrubDeliveredFollowUpText();
     this.persist();
   }
 
@@ -166,7 +167,14 @@ export class AuditStore {
   }
 
   updateFollowUpStatus(id: string, status: ApprovalFollowUp["status"], sentAt: string | null): void {
-    this.db.run(`update approval_followups set status = ?, sent_at = ? where id = ?`, [status, sentAt, id]);
+    this.db.run(
+      `update approval_followups
+          set status = ?,
+              sent_at = ?,
+              text = case when ? = 'queued' then text else '' end
+        where id = ?`,
+      [status, sentAt, status, id]
+    );
     this.persist();
   }
 
@@ -226,6 +234,10 @@ export class AuditStore {
     for (const [name, type] of missingColumns) {
       this.db.exec(`alter table approval_decisions add column ${name} ${type}`);
     }
+  }
+
+  private scrubDeliveredFollowUpText(): void {
+    this.db.run(`update approval_followups set text = '' where status != 'queued' and text != ''`);
   }
 
   private followUpsFromRows(rows: unknown[][]): ApprovalFollowUp[] {

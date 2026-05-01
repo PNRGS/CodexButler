@@ -3,7 +3,7 @@ import cors from "@fastify/cors";
 import { nanoid } from "nanoid";
 import { createHash } from "node:crypto";
 import { ZodError } from "zod";
-import type { ApprovalDecision, FollowUpStatus, Rule, ServerEvent, Thread } from "@concierge/shared";
+import type { ApprovalDecision, ApprovalRequest, FollowUpStatus, Rule, ServerEvent, Thread } from "@concierge/shared";
 import { approvalDecisionRequestSchema, promptSubmissionRequestSchema } from "@concierge/shared";
 import { registerAuth } from "./auth.js";
 import type { AppConfig } from "./config.js";
@@ -29,8 +29,43 @@ function textHash(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
 
+function arrayEquals(left: readonly string[] | null | undefined, right: readonly string[] | null | undefined): boolean {
+  if (!left || !right || left.length !== right.length) {
+    return false;
+  }
+  return left.every((value, index) => value === right[index]);
+}
+
 function threadCanReceiveFollowUp(thread: Thread): boolean {
   return thread.status !== "running" && thread.status !== "waitingOnApproval" && !thread.hasPendingApproval;
+}
+
+function validateApprovalDecision(approval: ApprovalRequest, input: { decision: ApprovalDecision["decision"]; rulePrefix?: string[] }): void {
+  if (!approval.availableDecisions.includes(input.decision)) {
+    throw httpError(400, "Decision is not available for this approval request");
+  }
+
+  if (input.decision === "alwaysAllowRule") {
+    if (!arrayEquals(input.rulePrefix, approval.proposedRule)) {
+      throw httpError(400, "Rule prefix must match the proposed approval rule");
+    }
+    return;
+  }
+
+  if (input.rulePrefix !== undefined) {
+    throw httpError(400, "Rule prefix is only allowed for always-allow decisions");
+  }
+}
+
+function corsOriginForConfig(config: AppConfig) {
+  if (!config.BACKEND_PUBLIC_BIND) {
+    return true;
+  }
+
+  const allowedOrigins = new Set(config.BACKEND_ALLOWED_ORIGINS);
+  return (origin: string | undefined, callback: (error: Error | null, allow: boolean) => void): void => {
+    callback(null, !!origin && allowedOrigins.has(origin));
+  };
 }
 
 interface MockCaseSeeder {
@@ -99,7 +134,7 @@ export function buildServer({ config, codex, auditStore }: ServerDependencies) {
   }
 
   app.register(cors, {
-    origin: true,
+    origin: corsOriginForConfig(config),
     credentials: false
   });
   registerAuth(app, config.BACKEND_AUTH_TOKEN);
@@ -119,6 +154,10 @@ export function buildServer({ config, codex, auditStore }: ServerDependencies) {
   });
 
   app.get("/health", async () => {
+    return { ok: true };
+  });
+
+  app.get("/session", async () => {
     return { ok: true, session: refreshSession() };
   });
 
@@ -160,11 +199,15 @@ export function buildServer({ config, codex, auditStore }: ServerDependencies) {
       throw httpError(400, "Cancel decisions cannot include a follow-up instruction");
     }
     const approval = (await codex.listApprovals()).find((candidate) => candidate.id === approvalId);
+    if (!approval) {
+      throw httpError(404, "Approval request is no longer pending");
+    }
+    validateApprovalDecision(approval, input);
     await codex.decideApproval(approvalId, input);
 
     let followUpStatus: FollowUpStatus = "none";
     const followUpPreview = input.followUpText ? promptPreview(input.followUpText) : null;
-    if (approval && input.followUpText) {
+    if (input.followUpText) {
       const followUp: ApprovalFollowUp = {
         id: nanoid(),
         approvalId,
@@ -184,11 +227,11 @@ export function buildServer({ config, codex, auditStore }: ServerDependencies) {
     const decision: ApprovalDecision = {
       id: nanoid(),
       approvalId,
-      threadId: approval?.threadId ?? null,
+      threadId: approval.threadId,
       decision: input.decision,
       rulePrefix: input.rulePrefix ?? null,
-      command: approval?.command ?? null,
-      cwd: approval?.cwd ?? null,
+      command: approval.command,
+      cwd: approval.cwd,
       followUpPreview,
       source: "mobile",
       decidedAt: new Date().toISOString()
@@ -196,7 +239,7 @@ export function buildServer({ config, codex, auditStore }: ServerDependencies) {
     auditStore.recordDecision(decision);
     app.log.info({ approvalId, decision: input.decision }, "approval decision sent");
 
-    if (input.decision === "alwaysAllowRule" && input.rulePrefix?.length) {
+    if (input.decision === "alwaysAllowRule" && input.rulePrefix) {
       const rule: Rule = {
         id: nanoid(),
         prefix: input.rulePrefix,

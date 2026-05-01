@@ -277,8 +277,8 @@ Current setup:
 - full dev: `pnpm dev`
 - seed mock approval: `pnpm mock:approval`
 - lint/type/tests: `pnpm lint`, `pnpm typecheck`, `pnpm test`
-- backend env: copy `.env.example` to `.env`; use `CODEX_MOCK_MODE=true` for local UI development, then `CODEX_MOCK_MODE=false` to connect to Codex
-- Codex connection mode: `CODEX_CONNECTION_MODE=child` starts a Concierge-owned `codex app-server`; `CODEX_CONNECTION_MODE=proxy` tries `codex app-server proxy` and reports `unavailable` in `/health` when no Desktop control socket is exposed.
+- backend env: copy `.env.example` to `.env`; use `CODEX_MOCK_MODE=true` for local UI development, then `CODEX_MOCK_MODE=false` to connect to Codex; use `BACKEND_ALLOWED_ORIGINS` only for browser clients that need CORS while `BACKEND_PUBLIC_BIND=true`
+- Codex connection mode: `CODEX_CONNECTION_MODE=child` starts a Concierge-owned `codex app-server`; `CODEX_CONNECTION_MODE=proxy` tries `codex app-server proxy` and reports `unavailable` in authenticated `/session` when no Desktop control socket is exposed.
 - directory map: `apps/backend` Fastify API, `apps/mobile` Expo app, `packages/shared` shared models/schemas/policy
 - real approval routing: Concierge receives approvals for turns owned by its backend app-server connection; Desktop-owned approvals require `CODEX_CONNECTION_MODE=proxy` and only work if the local Codex install exposes a compatible app-server control socket.
 

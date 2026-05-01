@@ -33,8 +33,12 @@ async function request<T>(config: ApiConfig, path: string, init?: RequestInit): 
   return (await response.json()) as T;
 }
 
-export function health(config: ApiConfig): Promise<{ ok: boolean; session: BackendSession }> {
+export function health(config: ApiConfig): Promise<{ ok: boolean }> {
   return request(config, "/health");
+}
+
+export function getSession(config: ApiConfig): Promise<{ ok: boolean; session: BackendSession }> {
+  return request(config, "/session");
 }
 
 export function listThreads(config: ApiConfig): Promise<Page<Thread>> {
