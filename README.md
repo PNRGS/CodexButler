@@ -35,6 +35,12 @@ From a thread detail screen, the mobile app can send a short prompt to an existi
 
 Real Codex approvals are live JSON-RPC requests sent to the app-server connection that owns the running turn. Concierge can answer approvals for turns started through its backend app-server connection, including prompts sent from the mobile app. `CODEX_CONNECTION_MODE=proxy` is the experimental path for discovering whether the local Codex installation exposes the Desktop-owned app-server to another client.
 
+## Current Technical Limitation
+
+Concierge does not currently receive approval requests that originate inside Codex Desktop. On the tested Windows setup, Codex Desktop starts its own app-server as `codex.exe app-server --analytics-default-enabled`, which uses the default `stdio://` transport and does not create a shared control socket. As a result, `codex app-server proxy` cannot attach to the Desktop-owned app-server and `/health` reports `Bridge: unavailable` in proxy mode.
+
+The supported real-Codex flow today is: start or resume work through Concierge's backend app-server connection, then answer approvals created by that backend-owned turn from the mobile app.
+
 ## Mock Approval Cases
 
 When the backend runs with `CODEX_MOCK_MODE=true`, you can seed one pending approval for repeated Android testing:
