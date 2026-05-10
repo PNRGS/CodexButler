@@ -1,5 +1,5 @@
 {
-  "name": "@concierge/mobile",
+  "name": "@codexbutler/mobile",
   "version": "0.1.0",
   "private": true,
   "main": "expo-router/entry",
@@ -8,12 +8,12 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "lint": "pnpm --filter @concierge/shared build && tsc -p tsconfig.json --noEmit",
-    "typecheck": "pnpm --filter @concierge/shared build && tsc -p tsconfig.json --noEmit",
-    "test": "pnpm --filter @concierge/shared build && tsc -p tsconfig.json --noEmit"
+    "lint": "pnpm --filter @codexbutler/shared build && tsc -p tsconfig.json --noEmit",
+    "typecheck": "pnpm --filter @codexbutler/shared build && tsc -p tsconfig.json --noEmit",
+    "test": "pnpm --filter @codexbutler/shared build && tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@concierge/shared": "workspace:*",
+    "@codexbutler/shared": "workspace:*",
     "@expo/metro-runtime": "^6.1.2",
     "@expo/vector-icons": "~15.1.1",
     "@react-native-async-storage/async-storage": "2.2.0",

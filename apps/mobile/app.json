@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "Concierge",
-    "slug": "concierge",
+    "name": "CodexButler",
+    "slug": "codexbutler",
     "version": "0.1.0",
     "orientation": "portrait",
-    "scheme": "concierge",
+    "scheme": "codexbutler",
     "userInterfaceStyle": "automatic",
     "plugins": [
       "expo-router",

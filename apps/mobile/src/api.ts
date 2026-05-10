@@ -8,8 +8,9 @@ import type {
   Project,
   PromptSubmissionResponse,
   Thread,
+  ThreadCreationResponse,
   Turn
-} from "@concierge/shared";
+} from "@codexbutler/shared";
 
 export interface ApiConfig {
   backendUrl: string;
@@ -43,6 +44,13 @@ export function getSession(config: ApiConfig): Promise<{ ok: boolean; session: B
 
 export function listThreads(config: ApiConfig): Promise<Page<Thread>> {
   return request(config, "/threads?limit=50");
+}
+
+export function createThread(config: ApiConfig, text: string, cwd?: string | null): Promise<ThreadCreationResponse> {
+  return request(config, "/threads", {
+    method: "POST",
+    body: JSON.stringify({ text, cwd: cwd ?? undefined })
+  });
 }
 
 export function getThread(config: ApiConfig, threadId: string): Promise<Thread> {

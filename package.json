@@ -1,13 +1,13 @@
 {
-  "name": "concierge",
+  "name": "codexbutler",
   "version": "0.1.0",
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "scripts": {
-    "dev": "pnpm --parallel --filter @concierge/backend --filter @concierge/mobile dev",
-    "dev:backend": "pnpm --filter @concierge/backend dev",
-    "dev:mobile": "pnpm --filter @concierge/mobile dev",
-    "mock:approval": "pnpm --filter @concierge/backend mock:approval",
+    "dev": "pnpm --parallel --filter @codexbutler/backend --filter @codexbutler/mobile dev",
+    "dev:backend": "pnpm --filter @codexbutler/backend dev",
+    "dev:mobile": "pnpm --filter @codexbutler/mobile dev",
+    "mock:approval": "pnpm --filter @codexbutler/backend mock:approval",
     "lint": "pnpm --recursive lint",
     "typecheck": "pnpm --recursive typecheck",
     "test": "pnpm --recursive test"

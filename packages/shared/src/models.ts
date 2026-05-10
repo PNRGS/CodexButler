@@ -96,8 +96,19 @@ export interface PromptSubmissionRequest {
   text: string;
 }
 
+export interface ThreadCreationRequest {
+  text: string;
+  cwd?: string | null;
+}
+
 export interface PromptSubmissionResponse {
   ok: true;
+  turnId: string;
+}
+
+export interface ThreadCreationResponse {
+  ok: true;
+  thread: Thread;
   turnId: string;
 }
 

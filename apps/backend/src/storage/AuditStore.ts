@@ -2,7 +2,7 @@ import initSqlJs, { type Database } from "sql.js";
 import { createRequire } from "node:module";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import type { ApprovalDecision, ApprovalDecisionKind, ApprovalHistoryItem, Rule } from "@concierge/shared";
+import type { ApprovalDecision, ApprovalDecisionKind, ApprovalHistoryItem, Rule } from "@codexbutler/shared";
 
 export interface PromptAuditEntry {
   id: string;

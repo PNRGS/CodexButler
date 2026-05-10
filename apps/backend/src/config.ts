@@ -20,12 +20,13 @@ const envSchema = z.object({
     ),
   BACKEND_AUTH_TOKEN: z.string().min(32, "BACKEND_AUTH_TOKEN must be at least 32 characters"),
   CODEX_BIN: z.string().default("codex"),
+  CODEX_DEFAULT_CWD: z.string().default(process.cwd()),
   CODEX_MOCK_MODE: z
     .string()
     .default("true")
     .transform((value) => value === "true"),
   CODEX_CONNECTION_MODE: z.enum(["child", "proxy"]).default("child"),
-  SQLITE_PATH: z.string().default("./concierge.sqlite")
+  SQLITE_PATH: z.string().default("./codexbutler.sqlite")
 });
 
 export type AppConfig = z.infer<typeof envSchema>;

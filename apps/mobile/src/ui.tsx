@@ -1,4 +1,5 @@
 import { useState, type PropsWithChildren } from "react";
+import { Pin } from "lucide-react-native";
 import {
   ActivityIndicator,
   Pressable,
@@ -10,7 +11,7 @@ import {
   type StyleProp,
   type ViewStyle
 } from "react-native";
-import type { ApprovalDecisionKind, ApprovalHistoryItem, ApprovalRequest, Thread, TurnItem } from "@concierge/shared";
+import type { ApprovalDecisionKind, ApprovalHistoryItem, ApprovalRequest, Thread, TurnItem } from "@codexbutler/shared";
 
 export const colors = {
   ink: "#172026",
@@ -32,7 +33,7 @@ export function LoadingState() {
   return (
     <View style={styles.center}>
       <ActivityIndicator color={colors.accent} />
-      <Text style={styles.muted}>Connecting to Concierge</Text>
+      <Text style={styles.muted}>Connecting to CodexButler</Text>
     </View>
   );
 }
@@ -93,6 +94,14 @@ export function itemTitle(type: string, title: string): string {
   return title || statusLabel(type);
 }
 
+function formatItemTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+  return new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
 export function StatusPill({ status, urgent = false }: { status: string; urgent?: boolean }) {
   return (
     <View style={[styles.pill, urgent && styles.dangerPill]}>
@@ -134,10 +143,22 @@ export function SecondaryButton({ children, style, ...props }: ButtonProps) {
   );
 }
 
-export function ThreadRow({ thread, compact = false }: { thread: Thread; compact?: boolean }) {
+export function ThreadRow({
+  thread,
+  compact = false,
+  pinned = false,
+  onPress,
+  onTogglePin
+}: {
+  thread: Thread;
+  compact?: boolean;
+  pinned?: boolean;
+  onPress?: () => void;
+  onTogglePin?: () => void;
+}) {
   const urgent = thread.status === "waitingOnApproval" || thread.hasPendingApproval;
-  return (
-    <View style={[styles.row, compact && styles.compactRow]}>
+  const content = (
+    <View style={[styles.threadContent, compact && styles.compactThreadContent, onTogglePin && styles.threadContentWithPin]}>
       <View style={styles.headerRow}>
         <Text style={[styles.rowTitle, { flex: 1 }]} numberOfLines={2}>
           {thread.title}
@@ -156,16 +177,46 @@ export function ThreadRow({ thread, compact = false }: { thread: Thread; compact
       ) : null}
     </View>
   );
+
+  return (
+    <View style={[styles.threadRow, pinned && styles.pinnedThreadRow]}>
+      {onPress ? (
+        <Pressable onPress={onPress} style={({ pressed }) => [pressed && styles.buttonPressed]}>
+          {content}
+        </Pressable>
+      ) : (
+        content
+      )}
+      {onTogglePin ? (
+        <Pressable
+          accessibilityLabel={pinned ? "Unpin thread" : "Pin thread"}
+          accessibilityRole="button"
+          onPress={onTogglePin}
+          style={({ pressed }) => [styles.pinButton, pinned && styles.pinnedPinButton, pressed && styles.buttonPressed]}
+        >
+          <Pin color={pinned ? colors.accent : colors.muted} fill={pinned ? colors.accent : "transparent"} size={18} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
 }
 
 export function TimelineItem({ item }: { item: TurnItem }) {
+  const isUser = item.type === "userMessage";
+  const isCommand = item.type === "commandExecution" || item.type.toLowerCase().includes("command");
+  const time = formatItemTime(item.createdAt);
   return (
-    <View style={styles.compactRow}>
-      <View style={styles.headerRow}>
-        <Text style={styles.rowTitle}>{itemTitle(item.type, item.title)}</Text>
+    <View style={[styles.messageRow, isUser && styles.userMessageRow, isCommand && styles.systemMessageRow]}>
+      <View style={[styles.messageBubble, isUser && styles.userMessageBubble, isCommand && styles.systemMessageBubble]}>
+        <View style={styles.messageMetaRow}>
+          <Text style={[styles.messageAuthor, isUser && styles.userMessageAuthor]}>{itemTitle(item.type, item.title)}</Text>
+          {time ? <Text style={[styles.messageTime, isUser && styles.userMessageTime]}>{time}</Text> : null}
+        </View>
+        <Text selectable style={[styles.messageText, isUser && styles.userMessageText, isCommand && styles.commandMessageText]}>
+          {item.body || item.type}
+        </Text>
         {item.status ? <StatusPill status={item.status} /> : null}
       </View>
-      <Text style={styles.muted}>{item.body || item.type}</Text>
     </View>
   );
 }
@@ -310,6 +361,46 @@ export const styles = StyleSheet.create({
     padding: 12,
     gap: 6
   },
+  threadRow: {
+    position: "relative",
+    overflow: "hidden",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8
+  },
+  pinnedThreadRow: {
+    borderColor: colors.accent,
+    backgroundColor: "#f3faf6"
+  },
+  threadContent: {
+    padding: 14,
+    gap: 8
+  },
+  compactThreadContent: {
+    padding: 12,
+    gap: 6
+  },
+  threadContentWithPin: {
+    paddingRight: 50
+  },
+  pinButton: {
+    position: "absolute",
+    right: 8,
+    top: 8,
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#fffdf8",
+    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth
+  },
+  pinnedPinButton: {
+    backgroundColor: "#dcefe9",
+    borderColor: "#b7d8cc"
+  },
   urgentRow: {
     borderColor: colors.danger,
     borderWidth: 1
@@ -389,6 +480,68 @@ export const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: 12,
     fontWeight: "700"
+  },
+  messageRow: {
+    width: "100%",
+    alignItems: "flex-start"
+  },
+  userMessageRow: {
+    alignItems: "flex-end"
+  },
+  systemMessageRow: {
+    alignItems: "stretch"
+  },
+  messageBubble: {
+    maxWidth: "88%",
+    backgroundColor: colors.surface,
+    borderColor: colors.border,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6
+  },
+  userMessageBubble: {
+    backgroundColor: colors.accent,
+    borderColor: colors.accent
+  },
+  systemMessageBubble: {
+    maxWidth: "100%",
+    backgroundColor: "#fffdf8"
+  },
+  messageMetaRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8
+  },
+  messageAuthor: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "800"
+  },
+  userMessageAuthor: {
+    color: "#ffffff"
+  },
+  messageTime: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "700"
+  },
+  userMessageTime: {
+    color: "#d9f0e8"
+  },
+  messageText: {
+    color: colors.ink,
+    fontSize: 15,
+    lineHeight: 21
+  },
+  userMessageText: {
+    color: "#ffffff"
+  },
+  commandMessageText: {
+    fontFamily: "Courier",
+    fontSize: 13,
+    lineHeight: 19
   },
   pill: {
     alignSelf: "flex-start",

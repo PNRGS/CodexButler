@@ -1,19 +1,19 @@
 {
-  "name": "@concierge/backend",
+  "name": "@codexbutler/backend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter @concierge/shared build && tsx watch src/index.ts",
+    "dev": "pnpm --filter @codexbutler/shared build && tsx watch src/index.ts",
     "start": "node dist/index.js",
     "mock:approval": "node scripts/seed-mock-approval.mjs",
-    "build": "pnpm --filter @concierge/shared build && tsc -p tsconfig.build.json",
-    "lint": "pnpm --filter @concierge/shared build && tsc -p tsconfig.json --noEmit",
-    "typecheck": "pnpm --filter @concierge/shared build && tsc -p tsconfig.json --noEmit",
+    "build": "pnpm --filter @codexbutler/shared build && tsc -p tsconfig.build.json",
+    "lint": "pnpm --filter @codexbutler/shared build && tsc -p tsconfig.json --noEmit",
+    "typecheck": "pnpm --filter @codexbutler/shared build && tsc -p tsconfig.json --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@concierge/shared": "workspace:*",
+    "@codexbutler/shared": "workspace:*",
     "@fastify/cors": "^10.0.2",
     "fastify": "^5.2.1",
     "nanoid": "^5.0.9",

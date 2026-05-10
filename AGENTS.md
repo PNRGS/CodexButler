@@ -159,6 +159,7 @@ Design backend endpoints around product needs, not raw Codex internals.
 
 Suggested resources:
 - `GET /threads`
+- `POST /threads`
 - `GET /threads/:id`
 - `GET /threads/:id/turns`
 - `GET /approvals`
@@ -277,10 +278,14 @@ Current setup:
 - full dev: `pnpm dev`
 - seed mock approval: `pnpm mock:approval`
 - lint/type/tests: `pnpm lint`, `pnpm typecheck`, `pnpm test`
-- backend env: copy `.env.example` to `.env`; use `CODEX_MOCK_MODE=true` for local UI development, then `CODEX_MOCK_MODE=false` to connect to Codex; use `BACKEND_ALLOWED_ORIGINS` only for browser clients that need CORS while `BACKEND_PUBLIC_BIND=true`
-- Codex connection mode: `CODEX_CONNECTION_MODE=child` starts a Concierge-owned `codex app-server`; `CODEX_CONNECTION_MODE=proxy` tries `codex app-server proxy` and reports `unavailable` in authenticated `/session` when no Desktop control socket is exposed.
+- backend env: copy `.env.example` to `.env`; use `CODEX_MOCK_MODE=true` for local UI development, then `CODEX_MOCK_MODE=false` to connect to Codex; set `CODEX_DEFAULT_CWD` to the project directory used for mobile-created threads; use `BACKEND_ALLOWED_ORIGINS` only for browser clients that need CORS while `BACKEND_PUBLIC_BIND=true`
+- Codex connection mode: `CODEX_CONNECTION_MODE=child` starts a CodexButler-owned `codex app-server`; `CODEX_CONNECTION_MODE=proxy` tries `codex app-server proxy` and reports `unavailable` in authenticated `/session` when no Desktop control socket is exposed.
+- Codex 0.130.x observation: on macOS `codex app-server` works over stdio and `thread/turns/list` supports `itemsView: "summary"`; `codex remote-control` is not currently a backend mode because `0.130.0-alpha.5` attempted ChatGPT websocket enrollment and did not answer local JSON-RPC.
 - directory map: `apps/backend` Fastify API, `apps/mobile` Expo app, `packages/shared` shared models/schemas/policy
-- real approval routing: Concierge receives approvals for turns owned by its backend app-server connection; Desktop-owned approvals require `CODEX_CONNECTION_MODE=proxy` and only work if the local Codex install exposes a compatible app-server control socket.
+- current mobile scope: Inbox can create backend-owned threads, choose default/project/custom cwd, show approvals first, pin threads locally, group recent threads by project, and render a readable thread timeline with a guarded prompt composer.
+- real approval routing: CodexButler receives approvals for turns owned by its backend app-server connection; Desktop-owned approvals require `CODEX_CONNECTION_MODE=proxy` and only work if the local Codex install exposes a compatible app-server control socket.
+- Desktop live refresh limitation: phone-created turns are persisted through CodexButler's app-server connection, but Codex Desktop may not display them dynamically and can require refresh or restart to show them.
+- real remote recommendation: use `CODEX_CONNECTION_MODE=child` behind a private VPN or authenticated tunnel; do not directly expose CodexButler or Codex app-server on the public internet.
 
 ## When to create a plan
 

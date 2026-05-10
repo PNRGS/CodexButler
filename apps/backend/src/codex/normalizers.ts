@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { ApprovalDecisionKind, ApprovalRequest, Project, Thread, ThreadStatus, Turn, TurnItem } from "@concierge/shared";
-import { allowedDecisionsForCommand } from "@concierge/shared";
+import type { ApprovalDecisionKind, ApprovalRequest, Project, Thread, ThreadStatus, Turn, TurnItem } from "@codexbutler/shared";
+import { allowedDecisionsForCommand } from "@codexbutler/shared";
 
 function secondsToIso(value: unknown): string {
   if (typeof value === "number" && Number.isFinite(value)) {

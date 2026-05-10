@@ -101,8 +101,19 @@ export const promptSubmissionRequestSchema = z.object({
   text: z.string().trim().min(1).max(4000)
 });
 
+export const threadCreationRequestSchema = z.object({
+  text: z.string().trim().min(1).max(4000),
+  cwd: z.string().trim().min(1).max(1000).nullable().optional()
+});
+
 export const promptSubmissionResponseSchema = z.object({
   ok: z.literal(true),
+  turnId: z.string()
+});
+
+export const threadCreationResponseSchema = z.object({
+  ok: z.literal(true),
+  thread: threadSchema,
   turnId: z.string()
 });
 

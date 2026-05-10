@@ -1,5 +1,14 @@
 import { EventEmitter } from "node:events";
-import type { ApprovalRequest, Page, Project, PromptSubmissionRequest, ServerEvent, Thread, Turn } from "@concierge/shared";
+import type {
+  ApprovalRequest,
+  Page,
+  Project,
+  PromptSubmissionRequest,
+  ServerEvent,
+  Thread,
+  ThreadCreationRequest,
+  Turn
+} from "@codexbutler/shared";
 import type { ApprovalDecisionInput, CodexConnectionDiagnostics, CodexRepository } from "./types.js";
 
 export class MockCodexRepository extends EventEmitter implements CodexRepository {
@@ -13,24 +22,24 @@ export class MockCodexRepository extends EventEmitter implements CodexRepository
     const now = new Date().toISOString();
     const thread: Thread = {
       id: "mock-thread-1",
-      projectId: "project-concierge",
-      title: "Concierge MVP scaffold",
+      projectId: "project-codexbutler",
+      title: "CodexButler MVP scaffold",
       summary: "Build a local-first mobile companion for Codex threads.",
       status: "waitingOnApproval",
       hasPendingApproval: true,
-      cwd: "C:\\Users\\aurel\\Desktop\\concierge",
+      cwd: "C:\\Users\\aurel\\Desktop\\codexbutler",
       createdAt: now,
       updatedAt: now
     };
     this.threads.set(thread.id, thread);
     this.threads.set("mock-thread-2", {
       id: "mock-thread-2",
-      projectId: "project-concierge",
+      projectId: "project-codexbutler",
       title: "Idle thread for mobile prompts",
       summary: "Use this mock thread to test sending prompts from Android.",
       status: "idle",
       hasPendingApproval: false,
-      cwd: "C:\\Users\\aurel\\Desktop\\concierge",
+      cwd: "C:\\Users\\aurel\\Desktop\\codexbutler",
       createdAt: now,
       updatedAt: now
     });
@@ -46,7 +55,7 @@ export class MockCodexRepository extends EventEmitter implements CodexRepository
             id: "mock-user-1",
             type: "userMessage",
             title: "User message",
-            body: "Implement the Concierge MVP plan.",
+            body: "Implement the CodexButler MVP plan.",
             status: "completed",
             createdAt: now,
             completedAt: now
@@ -134,9 +143,9 @@ export class MockCodexRepository extends EventEmitter implements CodexRepository
   async listProjects(): Promise<Project[]> {
     return [
       {
-        id: "project-concierge",
-        name: "concierge",
-        cwd: "C:\\Users\\aurel\\Desktop\\concierge",
+        id: "project-codexbutler",
+        name: "codexbutler",
+        cwd: "C:\\Users\\aurel\\Desktop\\codexbutler",
         lastSeenAt: new Date().toISOString()
       }
     ];
@@ -277,6 +286,26 @@ export class MockCodexRepository extends EventEmitter implements CodexRepository
       this.emitEvent({ type: "thread.updated", thread: updated });
     }
     this.emitEvent({ type: "approval.resolved", approvalId });
+  }
+
+  async startThread(input: ThreadCreationRequest): Promise<{ thread: Thread; turn: Turn }> {
+    const now = new Date().toISOString();
+    const threadId = `mock-thread-created-${Date.now()}`;
+    const thread: Thread = {
+      id: threadId,
+      projectId: "project-codexbutler",
+      title: input.text.slice(0, 80),
+      summary: input.text.slice(0, 160),
+      status: "idle",
+      hasPendingApproval: false,
+      cwd: input.cwd ?? "C:\\Users\\aurel\\Desktop\\codexbutler",
+      createdAt: now,
+      updatedAt: now
+    };
+    this.threads.set(thread.id, thread);
+    const turn = await this.sendPrompt(thread.id, { text: input.text });
+    this.emitEvent({ type: "thread.updated", thread });
+    return { thread, turn };
   }
 
   async sendPrompt(threadId: string, input: PromptSubmissionRequest): Promise<Turn> {

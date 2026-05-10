@@ -1,5 +1,5 @@
 import type { FastifyReply } from "fastify";
-import type { ServerEvent } from "@concierge/shared";
+import type { ServerEvent } from "@codexbutler/shared";
 
 export class SseBroker {
   private readonly clients = new Set<FastifyReply>();

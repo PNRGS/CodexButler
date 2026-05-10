@@ -1,15 +1,15 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ScrollView, Text, View } from "react-native";
-import type { ApprovalDecisionKind, ApprovalRequest } from "@concierge/shared";
+import type { ApprovalDecisionKind, ApprovalRequest } from "@codexbutler/shared";
 import { decideApproval, listApprovals, listRecentApprovals } from "../src/api";
 import { useSettings } from "../src/settings";
 import { ApprovalCard, EmptyState, LoadingState, RecentDecisionRow, Screen, SectionHeader, styles } from "../src/ui";
-import { useConciergeEvents } from "../src/useConciergeEvents";
+import { useCodexButlerEvents } from "../src/useCodexButlerEvents";
 
 export default function ApprovalsScreen() {
   const settings = useSettings();
   const queryClient = useQueryClient();
-  useConciergeEvents();
+  useCodexButlerEvents();
   const approvals = useQuery({
     queryKey: ["approvals", settings.backendUrl],
     enabled: settings.ready,

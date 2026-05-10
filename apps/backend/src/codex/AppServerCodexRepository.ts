@@ -1,5 +1,14 @@
 import { EventEmitter } from "node:events";
-import type { ApprovalRequest, Page, Project, PromptSubmissionRequest, ServerEvent, Thread, Turn } from "@concierge/shared";
+import type {
+  ApprovalRequest,
+  Page,
+  Project,
+  PromptSubmissionRequest,
+  ServerEvent,
+  Thread,
+  ThreadCreationRequest,
+  Turn
+} from "@codexbutler/shared";
 import {
   projectFromThread,
   normalizeApplyPatchApproval,
@@ -67,7 +76,7 @@ export class AppServerCodexRepository extends EventEmitter implements CodexRepos
         detail:
           this.connectionMode === "proxy"
             ? "Connected through codex app-server proxy."
-            : "Connected to a Concierge-owned codex app-server child process."
+            : "Connected to a CodexButler-owned codex app-server child process."
       };
     }
 
@@ -109,6 +118,7 @@ export class AppServerCodexRepository extends EventEmitter implements CodexRepos
       threadId,
       cursor,
       limit,
+      itemsView: "summary",
       sortDirection: "desc"
     })) as { data?: unknown[]; nextCursor?: string | null };
     const data = (result.data ?? []).map((raw) => normalizeTurn(raw, threadId));
@@ -142,6 +152,28 @@ export class AppServerCodexRepository extends EventEmitter implements CodexRepos
     this.client.respond(pending.requestId, toCodexApprovalResponse(input, pending.responseKind));
     this.approvals.delete(approvalId);
     this.emitEvent({ type: "approval.resolved", approvalId });
+  }
+
+  async startThread(input: ThreadCreationRequest): Promise<{ thread: Thread; turn: Turn }> {
+    const result = (await this.client.request("thread/start", {
+      cwd: input.cwd ?? null,
+      approvalsReviewer: "user",
+      ephemeral: false,
+      sessionStartSource: "startup"
+    })) as { thread?: unknown };
+    const thread = normalizeThread(result.thread, false);
+    this.threads.set(thread.id, thread);
+    this.emitEvent({ type: "thread.updated", thread });
+
+    const turnResult = (await this.client.request("turn/start", {
+      threadId: thread.id,
+      input: [{ type: "text", text: input.text }],
+      approvalsReviewer: "user"
+    })) as { turn?: unknown };
+    const turn = normalizeTurn(turnResult.turn, thread.id);
+    this.upsertTurn(thread.id, turn);
+    this.emitEvent({ type: "turn.updated", threadId: thread.id, turn });
+    return { thread, turn };
   }
 
   async sendPrompt(threadId: string, input: PromptSubmissionRequest): Promise<Turn> {

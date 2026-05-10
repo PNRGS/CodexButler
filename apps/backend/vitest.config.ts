@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 export default defineConfig({
   resolve: {
     alias: {
-      "@concierge/shared": resolve(__dirname, "../../packages/shared/src/index.ts")
+      "@codexbutler/shared": resolve(__dirname, "../../packages/shared/src/index.ts")
     }
   },
   test: {

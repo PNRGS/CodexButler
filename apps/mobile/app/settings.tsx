@@ -5,6 +5,8 @@ import { getSession } from "../src/api";
 import { useSettings } from "../src/settings";
 import { PrimaryButton, Screen, colors, styles } from "../src/ui";
 
+const SESSION_REFRESH_INTERVAL_MS = 5000;
+
 export default function SettingsScreen() {
   const settings = useSettings();
   const [backendUrl, setBackendUrl] = useState(settings.backendUrl);
@@ -12,7 +14,8 @@ export default function SettingsScreen() {
   const sessionQuery = useQuery({
     queryKey: ["session", settings.backendUrl, settings.token],
     enabled: settings.ready,
-    queryFn: () => getSession(settings)
+    queryFn: () => getSession(settings),
+    refetchInterval: SESSION_REFRESH_INTERVAL_MS
   });
   const session = sessionQuery.data?.session;
 

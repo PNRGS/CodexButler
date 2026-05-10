@@ -20,7 +20,7 @@ importers:
 
   apps/backend:
     dependencies:
-      '@concierge/shared':
+      '@codexbutler/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@fastify/cors':
@@ -54,7 +54,7 @@ importers:
 
   apps/mobile:
     dependencies:
-      '@concierge/shared':
+      '@codexbutler/shared':
         specifier: workspace:*
         version: link:../../packages/shared
       '@expo/metro-runtime':

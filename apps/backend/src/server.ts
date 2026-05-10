@@ -3,8 +3,8 @@ import cors from "@fastify/cors";
 import { nanoid } from "nanoid";
 import { createHash } from "node:crypto";
 import { ZodError } from "zod";
-import type { ApprovalDecision, ApprovalRequest, FollowUpStatus, Rule, ServerEvent, Thread } from "@concierge/shared";
-import { approvalDecisionRequestSchema, promptSubmissionRequestSchema } from "@concierge/shared";
+import type { ApprovalDecision, ApprovalRequest, FollowUpStatus, Rule, ServerEvent, Thread } from "@codexbutler/shared";
+import { approvalDecisionRequestSchema, promptSubmissionRequestSchema, threadCreationRequestSchema } from "@codexbutler/shared";
 import { registerAuth } from "./auth.js";
 import type { AppConfig } from "./config.js";
 import { SseBroker } from "./events/SseBroker.js";
@@ -169,6 +169,25 @@ export function buildServer({ config, codex, auditStore }: ServerDependencies) {
     const query = request.query as { limit?: string; cursor?: string };
     const limit = Math.min(Number(query.limit ?? 25), 100);
     return codex.listThreads(limit, query.cursor ?? null);
+  });
+
+  app.post("/threads", async (request, reply) => {
+    const input = threadCreationRequestSchema.parse(request.body);
+    const cwd = input.cwd ?? config.CODEX_DEFAULT_CWD;
+    const { thread, turn } = await codex.startThread({ ...input, cwd });
+    const submittedAt = new Date().toISOString();
+    auditStore.recordPromptSubmission({
+      id: nanoid(),
+      threadId: thread.id,
+      source: "mobile",
+      submittedAt,
+      textLength: input.text.length,
+      textHash: textHash(input.text),
+      preview: promptPreview(input.text)
+    });
+    app.log.info({ threadId: thread.id, turnId: turn.id, textLength: input.text.length }, "mobile thread created");
+
+    return reply.code(201).send({ ok: true, thread, turnId: turn.id });
   });
 
   app.get("/threads/:id", async (request) => {

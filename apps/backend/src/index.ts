@@ -24,7 +24,7 @@ try {
 
 const host = config.BACKEND_PUBLIC_BIND ? "0.0.0.0" : config.BACKEND_HOST;
 await app.listen({ host, port: config.BACKEND_PORT });
-app.log.info({ host, port: config.BACKEND_PORT }, "concierge backend started");
+app.log.info({ host, port: config.BACKEND_PORT }, "codexbutler backend started");
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, async () => {

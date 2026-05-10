@@ -6,9 +6,10 @@ import type {
   Page,
   PromptSubmissionRequest,
   Project,
+  ThreadCreationRequest,
   Thread,
   Turn
-} from "@concierge/shared";
+} from "@codexbutler/shared";
 import type { EventEmitter } from "node:events";
 
 export interface ApprovalDecisionInput {
@@ -32,5 +33,6 @@ export interface CodexRepository extends Pick<EventEmitter, "on"> {
   listProjects(): Promise<Project[]>;
   listApprovals(): Promise<ApprovalRequest[]>;
   decideApproval(approvalId: string, input: ApprovalDecisionInput): Promise<void>;
+  startThread(input: ThreadCreationRequest): Promise<{ thread: Thread; turn: Turn }>;
   sendPrompt(threadId: string, input: PromptSubmissionRequest): Promise<Turn>;
 }

@@ -84,8 +84,8 @@ export class AppServerClient extends EventEmitter {
       await this.withConnectTimeout(
         this.request("initialize", {
           clientInfo: {
-            name: "concierge_mobile_companion",
-            title: "Concierge Mobile Companion",
+            name: "codexbutler_mobile_companion",
+            title: "CodexButler Mobile Companion",
             version: "0.1.0"
           },
           capabilities: {
