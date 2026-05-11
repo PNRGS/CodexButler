@@ -19,6 +19,45 @@ function timestampToIso(value: unknown, fallback = new Date().toISOString()): st
   return fallback;
 }
 
+function firstTimestamp(...values: unknown[]): unknown {
+  return values.find((value) => value !== undefined && value !== null && value !== "");
+}
+
+function createdTimestamp(source: Record<string, unknown>): unknown {
+  return firstTimestamp(
+    source.createdAt,
+    source.created_at,
+    source.createdAtMs,
+    source.created_at_ms,
+    source.startedAt,
+    source.started_at,
+    source.startedAtMs,
+    source.started_at_ms,
+    source.timestamp,
+    source.timestampMs,
+    source.timestamp_ms,
+    source.time,
+    source.ts
+  );
+}
+
+function completedTimestamp(source: Record<string, unknown>): unknown {
+  return firstTimestamp(
+    source.completedAt,
+    source.completed_at,
+    source.completedAtMs,
+    source.completed_at_ms,
+    source.endedAt,
+    source.ended_at,
+    source.finishedAt,
+    source.finished_at
+  );
+}
+
+function updatedTimestamp(source: Record<string, unknown>): unknown {
+  return firstTimestamp(source.updatedAt, source.updated_at, source.updatedAtMs, source.updated_at_ms, completedTimestamp(source), createdTimestamp(source));
+}
+
 function projectIdForCwd(cwd: string): string {
   return createHash("sha256").update(cwd).digest("hex").slice(0, 16);
 }
@@ -51,7 +90,7 @@ export function normalizeThread(raw: unknown, hasPendingApproval = false): Threa
     (typeof source.name === "string" && source.name) ||
     (typeof source.preview === "string" && source.preview) ||
     String(source.id ?? "Untitled thread");
-  const updatedAt = timestampToIso(source.updatedAt ?? source.updated_at);
+  const updatedAt = timestampToIso(updatedTimestamp(source));
   return {
     id: String(source.id),
     projectId: cwd ? projectIdForCwd(cwd) : null,
@@ -60,7 +99,7 @@ export function normalizeThread(raw: unknown, hasPendingApproval = false): Threa
     status: normalizeStatus(source.status),
     hasPendingApproval,
     cwd,
-    createdAt: timestampToIso(source.createdAt ?? source.created_at),
+    createdAt: timestampToIso(createdTimestamp(source), updatedAt),
     updatedAt
   };
 }
@@ -106,17 +145,24 @@ export function normalizeTurnItem(raw: unknown, fallbackCreatedAt?: string): Tur
     title: type.replace(/([A-Z])/g, " $1").trim(),
     body,
     status,
-    createdAt: timestampToIso(item.createdAt ?? item.created_at, fallbackCreatedAt),
-    completedAt: item.completedAt || item.completed_at ? timestampToIso(item.completedAt ?? item.completed_at) : null,
+    createdAt: timestampToIso(createdTimestamp(item), fallbackCreatedAt),
+    completedAt: completedTimestamp(item) ? timestampToIso(completedTimestamp(item)) : null,
     raw: item
   };
 }
 
-export function normalizeTurn(raw: unknown, threadId: string): Turn {
+export function normalizeTurn(raw: unknown, threadId: string, previous?: Turn): Turn {
   const source = raw as Record<string, unknown>;
-  const createdAt = timestampToIso(source.createdAt ?? source.created_at);
-  const completedAt = source.completedAt || source.completed_at ? timestampToIso(source.completedAt ?? source.completed_at) : null;
-  const items = Array.isArray(source.items) ? source.items.map((item) => normalizeTurnItem(item, createdAt)) : [];
+  const createdAt = timestampToIso(createdTimestamp(source), previous?.createdAt);
+  const completedAt = completedTimestamp(source) ? timestampToIso(completedTimestamp(source), previous?.completedAt ?? undefined) : null;
+  const previousItemsById = new Map(previous?.items.map((item) => [item.id, item]) ?? []);
+  const items = Array.isArray(source.items)
+    ? source.items.map((item) => {
+        const itemId = String((item as { id?: unknown }).id ?? "");
+        const previousItem = previousItemsById.get(itemId);
+        return normalizeTurnItem(item, previousItem?.createdAt ?? createdAt);
+      })
+    : [];
   return {
     id: String(source.id),
     threadId: String(source.threadId ?? threadId),

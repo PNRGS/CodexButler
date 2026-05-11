@@ -1,6 +1,6 @@
 import type { NotificationAddressMode } from "@codexbutler/shared";
 import * as Notifications from "expo-notifications";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 
 const CHANNEL_ID = "codexbutler-events";
 
@@ -9,9 +9,9 @@ let channelReady = false;
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
+    shouldShowBanner: AppState.currentState !== "active",
+    shouldShowList: AppState.currentState !== "active",
+    shouldPlaySound: AppState.currentState !== "active",
     shouldSetBadge: false
   })
 });
@@ -71,6 +71,10 @@ export function primeLocalNotifications(): void {
 }
 
 export async function notifyAttention(addressMode: NotificationAddressMode): Promise<void> {
+  if (AppState.currentState === "active") {
+    return;
+  }
+
   if (!(await ensureLocalNotificationPermissions())) {
     return;
   }

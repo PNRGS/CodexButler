@@ -121,7 +121,11 @@ export class AppServerCodexRepository extends EventEmitter implements CodexRepos
       itemsView: "summary",
       sortDirection: "desc"
     })) as { data?: unknown[]; nextCursor?: string | null };
-    const data = (result.data ?? []).map((raw) => normalizeTurn(raw, threadId));
+    const previousTurnsById = new Map((this.turns.get(threadId) ?? []).map((turn) => [turn.id, turn]));
+    const data = (result.data ?? []).map((raw) => {
+      const turnId = String((raw as { id?: unknown }).id ?? "");
+      return normalizeTurn(raw, threadId, previousTurnsById.get(turnId));
+    });
     this.turns.set(threadId, data);
     return { data, nextCursor: result.nextCursor ?? null };
   }
