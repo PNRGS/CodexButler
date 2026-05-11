@@ -8,7 +8,15 @@
     "userInterfaceStyle": "automatic",
     "plugins": [
       "expo-router",
-      "expo-font"
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/adaptive-icon-foreground.png",
+          "color": "#1f7a68",
+          "defaultChannel": "codexbutler-events"
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

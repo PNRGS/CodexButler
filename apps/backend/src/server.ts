@@ -4,17 +4,27 @@ import { nanoid } from "nanoid";
 import { createHash } from "node:crypto";
 import { ZodError } from "zod";
 import type { ApprovalDecision, ApprovalRequest, FollowUpStatus, Rule, ServerEvent, Thread } from "@codexbutler/shared";
-import { approvalDecisionRequestSchema, promptSubmissionRequestSchema, threadCreationRequestSchema } from "@codexbutler/shared";
+import {
+  approvalDecisionRequestSchema,
+  notificationDevicePreferencesRequestSchema,
+  notificationDeviceRegistrationRequestSchema,
+  notificationThreadPreferenceRequestSchema,
+  promptSubmissionRequestSchema,
+  threadCreationRequestSchema
+} from "@codexbutler/shared";
 import { registerAuth } from "./auth.js";
 import type { AppConfig } from "./config.js";
 import { SseBroker } from "./events/SseBroker.js";
 import { AuditStore, type ApprovalFollowUp } from "./storage/AuditStore.js";
 import type { CodexRepository } from "./codex/types.js";
+import { ExpoPushSender, type PushSender } from "./notifications/ExpoPushSender.js";
+import { NotificationService } from "./notifications/NotificationService.js";
 
 export interface ServerDependencies {
   config: AppConfig;
   codex: CodexRepository;
   auditStore: AuditStore;
+  pushSender?: PushSender;
 }
 
 function httpError(statusCode: number, message: string): Error & { statusCode: number } {
@@ -76,7 +86,7 @@ function canSeedMockCases(codex: CodexRepository): codex is CodexRepository & Mo
   return "seedApprovalCase" in codex && typeof codex.seedApprovalCase === "function";
 }
 
-export function buildServer({ config, codex, auditStore }: ServerDependencies) {
+export function buildServer({ config, codex, auditStore, pushSender = new ExpoPushSender() }: ServerDependencies) {
   const app = Fastify({
     logger: {
       level: "info",
@@ -84,6 +94,7 @@ export function buildServer({ config, codex, auditStore }: ServerDependencies) {
     }
   });
   const broker = new SseBroker();
+  const notificationService = new NotificationService(auditStore, pushSender, app.log);
   const diagnostics = codex.getConnectionDiagnostics();
   const session = {
     id: nanoid(),
@@ -142,6 +153,7 @@ export function buildServer({ config, codex, auditStore }: ServerDependencies) {
   codex.on?.("event", (event: ServerEvent) => {
     app.log.info({ type: event.type }, "codex event");
     broker.publish(event);
+    notificationService.handleCodexEvent(event);
     if (event.type === "thread.updated") {
       void processQueuedFollowUps(event.thread.id);
     }
@@ -210,6 +222,57 @@ export function buildServer({ config, codex, auditStore }: ServerDependencies) {
     const query = request.query as { limit?: string };
     const limit = Math.min(Math.max(Number(query.limit ?? 5), 1), 20);
     return { data: auditStore.listRecentDecisions(limit), nextCursor: null };
+  });
+
+  app.post("/notification-devices", async (request, reply) => {
+    const input = notificationDeviceRegistrationRequestSchema.parse(request.body);
+    const now = new Date().toISOString();
+    const device = auditStore.upsertNotificationDevice({
+      id: nanoid(),
+      pushToken: input.pushToken,
+      platform: input.platform,
+      addressMode: input.addressMode,
+      now
+    });
+    app.log.info({ deviceId: device.id, platform: device.platform }, "notification device registered");
+    return reply.code(201).send({ ok: true, device, idleThreadIds: auditStore.listNotificationIdleThreadIds(device.id) });
+  });
+
+  app.get("/notification-devices/:id", async (request) => {
+    const params = request.params as { id: string };
+    const device = auditStore.getNotificationDevice(params.id);
+    if (!device) {
+      throw httpError(404, "Notification device not found");
+    }
+    return { ok: true, device, idleThreadIds: auditStore.listNotificationIdleThreadIds(device.id) };
+  });
+
+  app.put("/notification-devices/:id/preferences", async (request) => {
+    const params = request.params as { id: string };
+    const input = notificationDevicePreferencesRequestSchema.parse(request.body);
+    const device = auditStore.updateNotificationDevicePreferences(params.id, input, new Date().toISOString());
+    if (!device) {
+      throw httpError(404, "Notification device not found");
+    }
+    app.log.info({ deviceId: device.id, addressMode: device.addressMode }, "notification preferences updated");
+    return { ok: true, device, idleThreadIds: auditStore.listNotificationIdleThreadIds(device.id) };
+  });
+
+  app.post("/notification-devices/:id/thread-preferences", async (request) => {
+    const params = request.params as { id: string };
+    const input = notificationThreadPreferenceRequestSchema.parse(request.body);
+    if (!auditStore.setNotificationThreadPreference(params.id, input.threadId, input.idleEnabled, new Date().toISOString())) {
+      throw httpError(404, "Notification device not found");
+    }
+    app.log.info({ deviceId: params.id, idleEnabled: input.idleEnabled }, "notification thread preference updated");
+    return { ok: true, idleThreadIds: auditStore.listNotificationIdleThreadIds(params.id) };
+  });
+
+  app.delete("/notification-devices/:id", async (request) => {
+    const params = request.params as { id: string };
+    auditStore.disableNotificationDevice(params.id, new Date().toISOString());
+    app.log.info({ deviceId: params.id }, "notification device disabled");
+    return { ok: true };
   });
 
   async function handleApprovalDecision(approvalId: string, body: unknown, reply: FastifyReply) {

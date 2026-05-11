@@ -94,6 +94,46 @@ export const approvalHistoryItemSchema = z.object({
   decidedAt: isoDateStringSchema
 });
 
+export const notificationAddressModeSchema = z.enum(["monsieur", "madame", "neutral"]);
+export const notificationDevicePlatformSchema = z.enum(["ios", "android", "web", "unknown"]);
+
+export const notificationDeviceSchema = z.object({
+  id: z.string(),
+  platform: notificationDevicePlatformSchema,
+  addressMode: notificationAddressModeSchema,
+  approvalsEnabled: z.boolean(),
+  createdAt: isoDateStringSchema,
+  updatedAt: isoDateStringSchema,
+  lastSeenAt: isoDateStringSchema
+});
+
+export const notificationDeviceRegistrationRequestSchema = z.object({
+  pushToken: z.string().trim().min(1).max(512),
+  platform: notificationDevicePlatformSchema,
+  addressMode: notificationAddressModeSchema
+});
+
+export const notificationDevicePreferencesRequestSchema = z.object({
+  addressMode: notificationAddressModeSchema,
+  approvalsEnabled: z.boolean().optional()
+});
+
+export const notificationThreadPreferenceRequestSchema = z.object({
+  threadId: z.string().trim().min(1).max(512),
+  idleEnabled: z.boolean()
+});
+
+export const notificationDeviceResponseSchema = z.object({
+  ok: z.literal(true),
+  device: notificationDeviceSchema,
+  idleThreadIds: z.array(z.string())
+});
+
+export const notificationPreferenceResponseSchema = z.object({
+  ok: z.literal(true),
+  idleThreadIds: z.array(z.string())
+});
+
 export const codexConnectionModeSchema = z.enum(["mock", "child", "proxy"]);
 export const codexBridgeStatusSchema = z.enum(["mock", "connected", "unavailable", "error"]);
 

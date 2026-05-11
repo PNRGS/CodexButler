@@ -9,6 +9,7 @@ import { MockCodexRepository } from "../src/codex/MockCodexRepository.js";
 import type { AppConfig } from "../src/config.js";
 import type { ApprovalDecisionInput, CodexRepository } from "../src/codex/types.js";
 import type { ApprovalRequest, Page, Project, Thread, Turn } from "@codexbutler/shared";
+import type { PushMessage, PushSender, PushSendResult } from "../src/notifications/ExpoPushSender.js";
 
 function testConfig(sqlitePath: string): AppConfig {
   return {
@@ -144,6 +145,19 @@ class SpecialCharacterApprovalRepository extends EventEmitter implements CodexRe
   }
 }
 
+class FakePushSender implements PushSender {
+  readonly messages: PushMessage[] = [];
+
+  async send(messages: PushMessage[]): Promise<PushSendResult[]> {
+    this.messages.push(...messages);
+    return messages.map((message) => ({ token: message.to, ok: true }));
+  }
+}
+
+async function waitForMicrotasks(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 describe("backend server", () => {
   it("allows health without auth and protects thread routes", async () => {
     const temp = mkdtempSync(join(tmpdir(), "codexbutler-"));
@@ -238,6 +252,147 @@ describe("backend server", () => {
     expect(preflight.statusCode).toBe(204);
     expect(preflight.headers["access-control-allow-origin"]).toBe("http://localhost:8082");
     expect(preflight.headers["access-control-allow-headers"]).toContain("authorization");
+
+    await app.close();
+    auditStore.close();
+  });
+
+  it("registers notification devices and stores idle thread preferences", async () => {
+    const temp = mkdtempSync(join(tmpdir(), "codexbutler-"));
+    const config = testConfig(join(temp, "test.sqlite"));
+    const auditStore = await AuditStore.open(config.SQLITE_PATH);
+    const codex = new MockCodexRepository();
+    await codex.connect();
+    const app = buildServer({ config, codex, auditStore, pushSender: new FakePushSender() });
+
+    const registered = await app.inject({
+      method: "POST",
+      url: "/notification-devices",
+      headers: { authorization: "Bearer test-token-for-codexbutler" },
+      payload: {
+        pushToken: "ExponentPushToken[test-device]",
+        platform: "ios",
+        addressMode: "madame"
+      }
+    });
+    expect(registered.statusCode).toBe(201);
+    expect(registered.json()).toMatchObject({
+      ok: true,
+      device: {
+        platform: "ios",
+        addressMode: "madame",
+        approvalsEnabled: true
+      },
+      idleThreadIds: []
+    });
+    expect(registered.json().device).not.toHaveProperty("pushToken");
+
+    const deviceId = registered.json().device.id;
+    const preference = await app.inject({
+      method: "POST",
+      url: `/notification-devices/${deviceId}/thread-preferences`,
+      headers: { authorization: "Bearer test-token-for-codexbutler" },
+      payload: { threadId: "mock-thread-1", idleEnabled: true }
+    });
+    expect(preference.statusCode).toBe(200);
+    expect(preference.json()).toEqual({ ok: true, idleThreadIds: ["mock-thread-1"] });
+
+    await app.close();
+    auditStore.close();
+  });
+
+  it("sends only opaque push notification text for approval requests", async () => {
+    const temp = mkdtempSync(join(tmpdir(), "codexbutler-"));
+    const config = testConfig(join(temp, "test.sqlite"));
+    const auditStore = await AuditStore.open(config.SQLITE_PATH);
+    const codex = new MockCodexRepository();
+    await codex.connect();
+    const pushSender = new FakePushSender();
+    const app = buildServer({ config, codex, auditStore, pushSender });
+
+    await app.inject({
+      method: "POST",
+      url: "/notification-devices",
+      headers: { authorization: "Bearer test-token-for-codexbutler" },
+      payload: {
+        pushToken: "ExponentPushToken[opaque-approval]",
+        platform: "android",
+        addressMode: "monsieur"
+      }
+    });
+    await app.inject({
+      method: "POST",
+      url: "/debug/mock/approval-cases",
+      headers: { authorization: "Bearer test-token-for-codexbutler" },
+      payload: { caseId: "deny" }
+    });
+    await waitForMicrotasks();
+
+    expect(pushSender.messages).toHaveLength(1);
+    expect(pushSender.messages[0]).toEqual({
+      to: "ExponentPushToken[opaque-approval]",
+      title: "Monsieur ? Your attention please.",
+      sound: "default",
+      channelId: "codexbutler-events"
+    });
+    expect(JSON.stringify(pushSender.messages[0])).not.toContain("git push");
+    expect(JSON.stringify(pushSender.messages[0])).not.toContain("mock-thread-1");
+
+    await app.close();
+    auditStore.close();
+  });
+
+  it("sends opaque idle push notifications only for opted-in threads", async () => {
+    const temp = mkdtempSync(join(tmpdir(), "codexbutler-"));
+    const config = testConfig(join(temp, "test.sqlite"));
+    const auditStore = await AuditStore.open(config.SQLITE_PATH);
+    const codex = new MockCodexRepository();
+    await codex.connect();
+    const pushSender = new FakePushSender();
+    const app = buildServer({ config, codex, auditStore, pushSender });
+
+    const registered = await app.inject({
+      method: "POST",
+      url: "/notification-devices",
+      headers: { authorization: "Bearer test-token-for-codexbutler" },
+      payload: {
+        pushToken: "ExponentPushToken[opaque-idle]",
+        platform: "ios",
+        addressMode: "neutral"
+      }
+    });
+    const deviceId = registered.json().device.id;
+    await app.inject({
+      method: "POST",
+      url: `/notification-devices/${deviceId}/thread-preferences`,
+      headers: { authorization: "Bearer test-token-for-codexbutler" },
+      payload: { threadId: "mock-thread-1", idleEnabled: true }
+    });
+    const seeded = await app.inject({
+      method: "POST",
+      url: "/debug/mock/approval-cases",
+      headers: { authorization: "Bearer test-token-for-codexbutler" },
+      payload: { caseId: "follow-up" }
+    });
+    await waitForMicrotasks();
+    pushSender.messages.length = 0;
+
+    await app.inject({
+      method: "POST",
+      url: `/approvals/${encodeURIComponent(seeded.json().approval.id)}/decision`,
+      headers: { authorization: "Bearer test-token-for-codexbutler" },
+      payload: { decision: "approveOnce" }
+    });
+    await waitForMicrotasks();
+
+    expect(pushSender.messages).toHaveLength(1);
+    expect(pushSender.messages[0]).toEqual({
+      to: "ExponentPushToken[opaque-idle]",
+      title: "Your attention please.",
+      sound: "default",
+      channelId: "codexbutler-events"
+    });
+    expect(JSON.stringify(pushSender.messages[0])).not.toContain("mock-thread-1");
 
     await app.close();
     auditStore.close();

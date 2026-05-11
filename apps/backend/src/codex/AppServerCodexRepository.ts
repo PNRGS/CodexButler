@@ -262,7 +262,10 @@ export class AppServerCodexRepository extends EventEmitter implements CodexRepos
     if ((notification.method === "item/started" || notification.method === "item/completed") && params?.item) {
       const threadId = String(params.threadId);
       const turnId = String(params.turnId);
-      const item = normalizeTurnItem(params.item);
+      const rawItem = params.item as { id?: unknown };
+      const existingTurn = this.turns.get(threadId)?.find((candidate) => candidate.id === turnId);
+      const existingItem = existingTurn?.items.find((candidate) => candidate.id === String(rawItem.id ?? ""));
+      const item = normalizeTurnItem(params.item, existingItem?.createdAt ?? existingTurn?.createdAt);
       const turn = this.upsertTurnItem(threadId, turnId, item);
       this.emitEvent({ type: "turn.updated", threadId, turn });
     }

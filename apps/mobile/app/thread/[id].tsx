@@ -1,14 +1,26 @@
 import { Stack, useLocalSearchParams } from "expo-router";
-import { Pin } from "lucide-react-native";
+import { Bell, Pin } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
+import {
+  FlatList,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ApprovalDecisionKind, ApprovalRequest, Turn, TurnItem } from "@codexbutler/shared";
 import { decideApproval, getThread, listApprovals, listTurns, sendPrompt } from "../../src/api";
 import { usePinnedThreads } from "../../src/pinnedThreads";
 import { useSettings } from "../../src/settings";
+import { useThreadNotifications } from "../../src/threadNotifications";
 import { ApprovalCard, EmptyState, LoadingState, PrimaryButton, Screen, StatusPill, TimelineItem, colors, styles } from "../../src/ui";
-import { useCodexButlerEvents } from "../../src/useCodexButlerEvents";
 
 interface TimelineEntry extends TurnItem {
   turnId: string;
@@ -82,10 +94,13 @@ export default function ThreadDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const settings = useSettings();
   const pinnedThreads = usePinnedThreads();
+  const threadNotifications = useThreadNotifications();
   const queryClient = useQueryClient();
+  const insets = useSafeAreaInsets();
+  const windowSize = useWindowDimensions();
   const listRef = useRef<FlatList<ConversationEntry>>(null);
   const [promptText, setPromptText] = useState("");
-  useCodexButlerEvents();
+  const [keyboardInset, setKeyboardInset] = useState(0);
   const thread = useQuery({
     queryKey: ["thread", id, settings.backendUrl],
     enabled: settings.ready && Boolean(id),
@@ -173,6 +188,26 @@ export default function ThreadDetailScreen() {
     return () => cancelAnimationFrame(frame);
   }, [id, conversationEntries.length]);
 
+  useEffect(() => {
+    if (Platform.OS !== "android") {
+      return;
+    }
+
+    const showSubscription = Keyboard.addListener("keyboardDidShow", (event) => {
+      const keyboardTop = event.endCoordinates?.screenY;
+      const keyboardHeight = event.endCoordinates?.height ?? 0;
+      const overlap =
+        typeof keyboardTop === "number" ? Math.max(0, windowSize.height - keyboardTop - insets.bottom) : keyboardHeight;
+      setKeyboardInset(Math.min(overlap, keyboardHeight || overlap));
+    });
+    const hideSubscription = Keyboard.addListener("keyboardDidHide", () => setKeyboardInset(0));
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, [insets.bottom, windowSize.height]);
+
   if (!settings.ready || thread.isLoading || turns.isLoading) {
     return <LoadingState />;
   }
@@ -198,12 +233,14 @@ export default function ThreadDetailScreen() {
   const promptTooLong = trimmedPrompt.length > 4000;
   const canSendPrompt = trimmedPrompt.length > 0 && !promptTooLong && !threadBusy && !promptMutation.isPending;
   const pinned = pinnedThreads.isPinned(thread.data.id);
+  const notificationsEnabled = threadNotifications.isThreadNotificationsEnabled(thread.data.id);
 
   return (
     <Screen>
       <Stack.Screen options={{ title: thread.data.title }} />
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        enabled={Platform.OS === "ios"}
         keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
         style={threadStyles.layout}
       >
@@ -220,6 +257,18 @@ export default function ThreadDetailScreen() {
                 style={({ pressed }) => [threadStyles.pinButton, pinned && threadStyles.pinnedPinButton, pressed && styles.buttonPressed]}
               >
                 <Pin color={pinned ? colors.accent : colors.muted} fill={pinned ? colors.accent : "transparent"} size={18} />
+              </Pressable>
+              <Pressable
+                accessibilityLabel={notificationsEnabled ? "Disable thread notifications" : "Enable thread notifications"}
+                accessibilityRole="button"
+                onPress={() => void threadNotifications.toggleThreadNotifications(thread.data.id)}
+                style={({ pressed }) => [
+                  threadStyles.pinButton,
+                  notificationsEnabled && threadStyles.pinnedPinButton,
+                  pressed && styles.buttonPressed
+                ]}
+              >
+                <Bell color={notificationsEnabled ? colors.accent : colors.muted} size={18} />
               </Pressable>
               <StatusPill status={thread.data.status} urgent={thread.data.status === "waitingOnApproval" || thread.data.hasPendingApproval} />
             </View>
@@ -254,25 +303,26 @@ export default function ThreadDetailScreen() {
           style={threadStyles.messagesList}
         />
 
-        <View style={threadStyles.composer}>
-          <TextInput
-            autoCapitalize="sentences"
-            multiline
-            onChangeText={setPromptText}
-            placeholder="Send a short instruction"
-            style={threadStyles.promptInput}
-            value={promptText}
-          />
+        <View style={[threadStyles.composer, keyboardInset > 0 && { marginBottom: keyboardInset }]}>
+          <View style={threadStyles.promptRow}>
+            <TextInput
+              autoCapitalize="sentences"
+              multiline
+              onFocus={() => listRef.current?.scrollToEnd({ animated: true })}
+              onChangeText={setPromptText}
+              placeholder="Send a short instruction"
+              style={threadStyles.promptInput}
+              value={promptText}
+            />
+            <PrimaryButton disabled={!canSendPrompt} onPress={() => promptMutation.mutate()} style={threadStyles.sendButton}>
+              {promptMutation.isPending ? "Sending" : promptMutation.isSuccess ? "Sent" : "Send"}
+            </PrimaryButton>
+          </View>
           {threadBusy ? <Text style={styles.muted}>This thread is busy or waiting on approval.</Text> : null}
           {promptTooLong ? <Text style={[styles.muted, { color: colors.danger }]}>Prompts are limited to 4,000 characters.</Text> : null}
           {promptMutation.isError ? <Text style={[styles.muted, { color: colors.danger }]}>{promptMutation.error.message}</Text> : null}
           {decisionMutation.isError ? <Text style={[styles.muted, { color: colors.danger }]}>{decisionMutation.error.message}</Text> : null}
-          <View style={styles.headerRow}>
-            <Text style={styles.muted}>{trimmedPrompt.length}/4000</Text>
-            <PrimaryButton disabled={!canSendPrompt} onPress={() => promptMutation.mutate()} style={{ minWidth: 92 }}>
-              {promptMutation.isPending ? "Sending" : promptMutation.isSuccess ? "Sent" : "Send"}
-            </PrimaryButton>
-          </View>
+          <Text style={styles.muted}>{trimmedPrompt.length}/4000</Text>
         </View>
       </KeyboardAvoidingView>
     </Screen>
@@ -327,7 +377,13 @@ const threadStyles = StyleSheet.create({
     padding: 10,
     gap: 8
   },
+  promptRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    gap: 8
+  },
   promptInput: {
+    flex: 1,
     minHeight: 74,
     maxHeight: 140,
     borderWidth: 1,
@@ -340,5 +396,9 @@ const threadStyles = StyleSheet.create({
     fontSize: 15,
     lineHeight: 20,
     textAlignVertical: "top"
+  },
+  sendButton: {
+    minHeight: 44,
+    minWidth: 92
   }
 });

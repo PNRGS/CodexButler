@@ -4,6 +4,10 @@ import type {
   ApprovalHistoryItem,
   ApprovalRequest,
   BackendSession,
+  NotificationAddressMode,
+  NotificationDevicePlatform,
+  NotificationDeviceResponse,
+  NotificationPreferenceResponse,
   Page,
   Project,
   PromptSubmissionResponse,
@@ -90,5 +94,44 @@ export function sendPrompt(config: ApiConfig, threadId: string, text: string): P
   return request(config, `/threads/${encodeURIComponent(threadId)}/prompts`, {
     method: "POST",
     body: JSON.stringify({ text })
+  });
+}
+
+export function registerNotificationDevice(
+  config: ApiConfig,
+  pushToken: string,
+  platform: NotificationDevicePlatform,
+  addressMode: NotificationAddressMode
+): Promise<NotificationDeviceResponse> {
+  return request(config, "/notification-devices", {
+    method: "POST",
+    body: JSON.stringify({ pushToken, platform, addressMode })
+  });
+}
+
+export function getNotificationDevice(config: ApiConfig, deviceId: string): Promise<NotificationDeviceResponse> {
+  return request(config, `/notification-devices/${encodeURIComponent(deviceId)}`);
+}
+
+export function updateNotificationDevicePreferences(
+  config: ApiConfig,
+  deviceId: string,
+  addressMode: NotificationAddressMode
+): Promise<NotificationDeviceResponse> {
+  return request(config, `/notification-devices/${encodeURIComponent(deviceId)}/preferences`, {
+    method: "PUT",
+    body: JSON.stringify({ addressMode })
+  });
+}
+
+export function updateNotificationThreadPreference(
+  config: ApiConfig,
+  deviceId: string,
+  threadId: string,
+  idleEnabled: boolean
+): Promise<NotificationPreferenceResponse> {
+  return request(config, `/notification-devices/${encodeURIComponent(deviceId)}/thread-preferences`, {
+    method: "POST",
+    body: JSON.stringify({ threadId, idleEnabled })
   });
 }

@@ -2,17 +2,21 @@ import { createHash, randomUUID } from "node:crypto";
 import type { ApprovalDecisionKind, ApprovalRequest, Project, Thread, ThreadStatus, Turn, TurnItem } from "@codexbutler/shared";
 import { allowedDecisionsForCommand } from "@codexbutler/shared";
 
-function secondsToIso(value: unknown): string {
+function timestampToIso(value: unknown, fallback = new Date().toISOString()): string {
   if (typeof value === "number" && Number.isFinite(value)) {
-    return new Date(value * 1000).toISOString();
+    return new Date(value > 1_000_000_000_000 ? value : value * 1000).toISOString();
   }
   if (typeof value === "string") {
     const parsed = Number(value);
     if (Number.isFinite(parsed)) {
-      return new Date(parsed * 1000).toISOString();
+      return new Date(parsed > 1_000_000_000_000 ? parsed : parsed * 1000).toISOString();
+    }
+    const parsedDate = Date.parse(value);
+    if (Number.isFinite(parsedDate)) {
+      return new Date(parsedDate).toISOString();
     }
   }
-  return new Date().toISOString();
+  return fallback;
 }
 
 function projectIdForCwd(cwd: string): string {
@@ -47,7 +51,7 @@ export function normalizeThread(raw: unknown, hasPendingApproval = false): Threa
     (typeof source.name === "string" && source.name) ||
     (typeof source.preview === "string" && source.preview) ||
     String(source.id ?? "Untitled thread");
-  const updatedAt = secondsToIso(source.updatedAt ?? source.updated_at);
+  const updatedAt = timestampToIso(source.updatedAt ?? source.updated_at);
   return {
     id: String(source.id),
     projectId: cwd ? projectIdForCwd(cwd) : null,
@@ -56,7 +60,7 @@ export function normalizeThread(raw: unknown, hasPendingApproval = false): Threa
     status: normalizeStatus(source.status),
     hasPendingApproval,
     cwd,
-    createdAt: secondsToIso(source.createdAt ?? source.created_at),
+    createdAt: timestampToIso(source.createdAt ?? source.created_at),
     updatedAt
   };
 }
@@ -80,7 +84,7 @@ function contentToText(content: unknown): string {
   return "";
 }
 
-export function normalizeTurnItem(raw: unknown): TurnItem {
+export function normalizeTurnItem(raw: unknown, fallbackCreatedAt?: string): TurnItem {
   const item = raw as Record<string, unknown>;
   const type = typeof item.type === "string" ? item.type : "item";
   const id = String(item.id ?? randomUUID());
@@ -102,15 +106,17 @@ export function normalizeTurnItem(raw: unknown): TurnItem {
     title: type.replace(/([A-Z])/g, " $1").trim(),
     body,
     status,
-    createdAt: secondsToIso(item.createdAt ?? item.created_at),
-    completedAt: item.completedAt || item.completed_at ? secondsToIso(item.completedAt ?? item.completed_at) : null,
+    createdAt: timestampToIso(item.createdAt ?? item.created_at, fallbackCreatedAt),
+    completedAt: item.completedAt || item.completed_at ? timestampToIso(item.completedAt ?? item.completed_at) : null,
     raw: item
   };
 }
 
 export function normalizeTurn(raw: unknown, threadId: string): Turn {
   const source = raw as Record<string, unknown>;
-  const items = Array.isArray(source.items) ? source.items.map(normalizeTurnItem) : [];
+  const createdAt = timestampToIso(source.createdAt ?? source.created_at);
+  const completedAt = source.completedAt || source.completed_at ? timestampToIso(source.completedAt ?? source.completed_at) : null;
+  const items = Array.isArray(source.items) ? source.items.map((item) => normalizeTurnItem(item, createdAt)) : [];
   return {
     id: String(source.id),
     threadId: String(source.threadId ?? threadId),
@@ -121,8 +127,8 @@ export function normalizeTurn(raw: unknown, threadId: string): Turn {
       source.status === "inProgress"
         ? source.status
         : "completed",
-    createdAt: secondsToIso(source.createdAt ?? source.created_at),
-    completedAt: source.completedAt || source.completed_at ? secondsToIso(source.completedAt ?? source.completed_at) : null,
+    createdAt,
+    completedAt,
     items
   };
 }

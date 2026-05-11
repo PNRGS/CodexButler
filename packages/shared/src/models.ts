@@ -130,6 +130,46 @@ export interface ApprovalHistoryItem {
   decidedAt: ISODateString;
 }
 
+export type NotificationAddressMode = "monsieur" | "madame" | "neutral";
+export type NotificationDevicePlatform = "ios" | "android" | "web" | "unknown";
+
+export interface NotificationDevice {
+  id: string;
+  platform: NotificationDevicePlatform;
+  addressMode: NotificationAddressMode;
+  approvalsEnabled: boolean;
+  createdAt: ISODateString;
+  updatedAt: ISODateString;
+  lastSeenAt: ISODateString;
+}
+
+export interface NotificationDeviceRegistrationRequest {
+  pushToken: string;
+  platform: NotificationDevicePlatform;
+  addressMode: NotificationAddressMode;
+}
+
+export interface NotificationDevicePreferencesRequest {
+  addressMode: NotificationAddressMode;
+  approvalsEnabled?: boolean;
+}
+
+export interface NotificationThreadPreferenceRequest {
+  threadId: string;
+  idleEnabled: boolean;
+}
+
+export interface NotificationDeviceResponse {
+  ok: true;
+  device: NotificationDevice;
+  idleThreadIds: string[];
+}
+
+export interface NotificationPreferenceResponse {
+  ok: true;
+  idleThreadIds: string[];
+}
+
 export type CodexConnectionMode = "mock" | "child" | "proxy";
 export type CodexBridgeStatus = "mock" | "connected" | "unavailable" | "error";
 

@@ -1,5 +1,5 @@
 import { Link, useRouter } from "expo-router";
-import { Settings } from "lucide-react-native";
+import { ChevronDown, ChevronRight, Settings } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
@@ -7,6 +7,7 @@ import type { ApprovalDecisionKind, ApprovalRequest, Project, Thread } from "@co
 import { createThread, decideApproval, listApprovals, listProjects, listRecentApprovals, listThreads } from "../src/api";
 import { usePinnedThreads } from "../src/pinnedThreads";
 import { useSettings } from "../src/settings";
+import { useThreadNotifications } from "../src/threadNotifications";
 import {
   ApprovalCard,
   EmptyState,
@@ -19,7 +20,6 @@ import {
   colors,
   styles
 } from "../src/ui";
-import { useCodexButlerEvents } from "../src/useCodexButlerEvents";
 
 const INBOX_REFRESH_INTERVAL_MS = 10000;
 
@@ -79,13 +79,14 @@ function groupThreadsByProject(threads: Thread[], projects: Project[]): ThreadPr
 export default function ThreadsScreen() {
   const settings = useSettings();
   const pinnedThreads = usePinnedThreads();
+  const threadNotifications = useThreadNotifications();
   const queryClient = useQueryClient();
   const router = useRouter();
   const [newThreadText, setNewThreadText] = useState("");
   const [selectedCwd, setSelectedCwd] = useState<string | null>(null);
   const [useCustomCwd, setUseCustomCwd] = useState(false);
   const [customCwd, setCustomCwd] = useState("");
-  useCodexButlerEvents();
+  const [projectPickerExpanded, setProjectPickerExpanded] = useState(false);
   const threads = useQuery({
     queryKey: ["threads", settings.backendUrl],
     enabled: settings.ready,
@@ -153,6 +154,7 @@ export default function ThreadsScreen() {
   const trimmedNewThreadText = newThreadText.trim();
   const trimmedCustomCwd = customCwd.trim();
   const projectOptions = uniqueProjectsByCwd(projects.data?.data ?? []);
+  const selectedProject = !useCustomCwd && selectedCwd ? projectOptions.find((project) => project.cwd === selectedCwd) : undefined;
   const knownPinnedThreads = sortThreadsByUpdatedAt(
     allThreads.filter((thread) => pinnedThreads.pinnedThreadIds.includes(thread.id))
   ).sort((a, b) => pinnedThreads.pinnedThreadIds.indexOf(a.id) - pinnedThreads.pinnedThreadIds.indexOf(b.id));
@@ -165,9 +167,16 @@ export default function ThreadsScreen() {
   const newThreadTooLong = trimmedNewThreadText.length > 4000;
   const customCwdInvalid = useCustomCwd && trimmedCustomCwd.length === 0;
   const canCreateThread = trimmedNewThreadText.length > 0 && !newThreadTooLong && !customCwdInvalid && !createThreadMutation.isPending;
+  const selectedProjectTitle = useCustomCwd ? "Custom path" : selectedProject?.name ?? "Default host folder";
+  const selectedProjectDetail = useCustomCwd
+    ? trimmedCustomCwd || "Enter an absolute folder path on the Codex host"
+    : selectedProject?.cwd ?? selectedCwd ?? "Uses CODEX_DEFAULT_CWD from the backend";
   const openThread = (threadId: string) => router.push({ pathname: "/thread/[id]", params: { id: threadId } });
   const togglePinnedThread = (threadId: string) => {
     void pinnedThreads.togglePinnedThread(threadId);
+  };
+  const toggleThreadNotifications = (threadId: string) => {
+    void threadNotifications.toggleThreadNotifications(threadId);
   };
 
   return (
@@ -199,11 +208,31 @@ export default function ThreadsScreen() {
               value={newThreadText}
             />
             <Text style={styles.rowTitle}>Project folder</Text>
-            <View style={styles.actionColumn}>
+            <Pressable
+              onPress={() => setProjectPickerExpanded((expanded) => !expanded)}
+              style={({ pressed }) => [projectPickerStyle.summary, pressed && projectChoiceStyle.pressed]}
+            >
+              <View style={{ flex: 1 }}>
+                <Text style={projectChoiceStyle.title} numberOfLines={1}>
+                  {selectedProjectTitle}
+                </Text>
+                <Text style={styles.pathText} numberOfLines={1}>
+                  {selectedProjectDetail}
+                </Text>
+              </View>
+              {projectPickerExpanded ? <ChevronDown color={colors.muted} size={18} /> : <ChevronRight color={colors.muted} size={18} />}
+            </Pressable>
+            {projectPickerExpanded ? (
+              <ScrollView
+                contentContainerStyle={projectPickerStyle.optionsContent}
+                nestedScrollEnabled
+                style={projectPickerStyle.optionsScroll}
+              >
               <Pressable
                 onPress={() => {
                   setUseCustomCwd(false);
                   setSelectedCwd(null);
+                  setProjectPickerExpanded(false);
                 }}
                 style={({ pressed }) => [
                   projectChoiceStyle.base,
@@ -222,6 +251,7 @@ export default function ThreadsScreen() {
                   onPress={() => {
                     setUseCustomCwd(false);
                     setSelectedCwd(project.cwd);
+                    setProjectPickerExpanded(false);
                   }}
                   style={({ pressed }) => [
                     projectChoiceStyle.base,
@@ -238,7 +268,10 @@ export default function ThreadsScreen() {
                 </Pressable>
               ))}
               <Pressable
-                onPress={() => setUseCustomCwd(true)}
+                onPress={() => {
+                  setUseCustomCwd(true);
+                  setProjectPickerExpanded(false);
+                }}
                 style={({ pressed }) => [projectChoiceStyle.base, useCustomCwd && projectChoiceStyle.selected, pressed && projectChoiceStyle.pressed]}
               >
                 <Text style={projectChoiceStyle.title}>Custom path</Text>
@@ -246,7 +279,8 @@ export default function ThreadsScreen() {
                   Enter an absolute folder path on the Codex host
                 </Text>
               </Pressable>
-            </View>
+              </ScrollView>
+            ) : null}
             {useCustomCwd ? (
               <TextInput
                 autoCapitalize="none"
@@ -296,8 +330,10 @@ export default function ThreadsScreen() {
                   thread={thread}
                   compact
                   pinned
+                  notificationsEnabled={threadNotifications.isThreadNotificationsEnabled(thread.id)}
                   onPress={() => openThread(thread.id)}
                   onTogglePin={() => togglePinnedThread(thread.id)}
+                  onToggleNotifications={() => toggleThreadNotifications(thread.id)}
                 />
               ))}
             </>
@@ -312,8 +348,10 @@ export default function ThreadsScreen() {
                   thread={thread}
                   compact
                   pinned={pinnedThreads.isPinned(thread.id)}
+                  notificationsEnabled={threadNotifications.isThreadNotificationsEnabled(thread.id)}
                   onPress={() => openThread(thread.id)}
                   onTogglePin={() => togglePinnedThread(thread.id)}
+                  onToggleNotifications={() => toggleThreadNotifications(thread.id)}
                 />
               ))}
             </>
@@ -343,8 +381,10 @@ export default function ThreadsScreen() {
                       thread={thread}
                       compact
                       pinned={pinnedThreads.isPinned(thread.id)}
+                      notificationsEnabled={threadNotifications.isThreadNotificationsEnabled(thread.id)}
                       onPress={() => openThread(thread.id)}
                       onTogglePin={() => togglePinnedThread(thread.id)}
+                      onToggleNotifications={() => toggleThreadNotifications(thread.id)}
                     />
                   ))}
                 </View>
@@ -415,6 +455,26 @@ const projectChoiceStyle = StyleSheet.create({
     color: colors.ink,
     fontSize: 14,
     fontWeight: "800"
+  }
+});
+
+const projectPickerStyle = StyleSheet.create({
+  summary: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    backgroundColor: "#fffdf8",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 10
+  },
+  optionsScroll: {
+    maxHeight: 240
+  },
+  optionsContent: {
+    gap: 8
   }
 });
 

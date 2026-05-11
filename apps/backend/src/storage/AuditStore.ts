@@ -2,7 +2,15 @@ import initSqlJs, { type Database } from "sql.js";
 import { createRequire } from "node:module";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
-import type { ApprovalDecision, ApprovalDecisionKind, ApprovalHistoryItem, Rule } from "@codexbutler/shared";
+import type {
+  ApprovalDecision,
+  ApprovalDecisionKind,
+  ApprovalHistoryItem,
+  NotificationAddressMode,
+  NotificationDevice,
+  NotificationDevicePlatform,
+  Rule
+} from "@codexbutler/shared";
 
 export interface PromptAuditEntry {
   id: string;
@@ -24,6 +32,18 @@ export interface ApprovalFollowUp {
   status: "queued" | "sent" | "failed";
   createdAt: string;
   sentAt: string | null;
+}
+
+export interface NotificationDeviceInput {
+  id: string;
+  pushToken: string;
+  platform: NotificationDevicePlatform;
+  addressMode: NotificationAddressMode;
+  now: string;
+}
+
+export interface StoredNotificationDevice extends NotificationDevice {
+  pushToken: string;
 }
 
 export class AuditStore {
@@ -76,6 +96,26 @@ export class AuditStore {
         status text not null,
         created_at text not null,
         sent_at text
+      );
+
+      create table if not exists notification_devices (
+        id text primary key,
+        push_token text not null unique,
+        platform text not null,
+        address_mode text not null,
+        approvals_enabled integer not null,
+        created_at text not null,
+        updated_at text not null,
+        last_seen_at text not null,
+        disabled_at text
+      );
+
+      create table if not exists notification_thread_preferences (
+        device_id text not null,
+        thread_id text not null,
+        idle_enabled integer not null,
+        updated_at text not null,
+        primary key (device_id, thread_id)
       );
     `);
     this.ensureApprovalDecisionColumns();
@@ -150,6 +190,136 @@ export class AuditStore {
       ]
     );
     this.persist();
+  }
+
+  upsertNotificationDevice(input: NotificationDeviceInput): NotificationDevice {
+    const existing = this.storedDeviceByPushToken(input.pushToken);
+    if (existing) {
+      this.db.run(
+        `update notification_devices
+            set platform = ?,
+                address_mode = ?,
+                approvals_enabled = 1,
+                updated_at = ?,
+                last_seen_at = ?,
+                disabled_at = null
+          where id = ?`,
+        [input.platform, input.addressMode, input.now, input.now, existing.id]
+      );
+      this.persist();
+      return this.getNotificationDevice(existing.id) as NotificationDevice;
+    }
+
+    this.db.run(
+      `insert into notification_devices
+          (id, push_token, platform, address_mode, approvals_enabled, created_at, updated_at, last_seen_at, disabled_at)
+       values (?, ?, ?, ?, 1, ?, ?, ?, null)`,
+      [input.id, input.pushToken, input.platform, input.addressMode, input.now, input.now, input.now]
+    );
+    this.persist();
+    return this.getNotificationDevice(input.id) as NotificationDevice;
+  }
+
+  getNotificationDevice(deviceId: string): NotificationDevice | null {
+    const device = this.storedDeviceById(deviceId);
+    return device ? this.publicDevice(device) : null;
+  }
+
+  private storedDeviceById(deviceId: string): StoredNotificationDevice | null {
+    const rows = this.db.exec(
+      `select id, push_token, platform, address_mode, approvals_enabled, created_at, updated_at, last_seen_at
+         from notification_devices
+        where id = ? and disabled_at is null
+        limit 1`,
+      [deviceId]
+    )[0]?.values;
+    return this.storedDeviceFromRow(rows?.[0] ?? null);
+  }
+
+  updateNotificationDevicePreferences(
+    deviceId: string,
+    input: { addressMode: NotificationAddressMode; approvalsEnabled?: boolean },
+    now: string
+  ): NotificationDevice | null {
+    const device = this.getNotificationDevice(deviceId);
+    if (!device) {
+      return null;
+    }
+    this.db.run(
+      `update notification_devices
+          set address_mode = ?,
+              approvals_enabled = ?,
+              updated_at = ?,
+              last_seen_at = ?
+        where id = ?`,
+      [input.addressMode, (input.approvalsEnabled ?? device.approvalsEnabled) ? 1 : 0, now, now, deviceId]
+    );
+    this.persist();
+    return this.getNotificationDevice(deviceId);
+  }
+
+  disableNotificationDevice(deviceId: string, now: string): boolean {
+    const device = this.getNotificationDevice(deviceId);
+    if (!device) {
+      return false;
+    }
+    this.db.run(`update notification_devices set disabled_at = ?, updated_at = ? where id = ?`, [now, now, deviceId]);
+    this.persist();
+    return true;
+  }
+
+  disableNotificationDeviceByPushToken(pushToken: string, now: string): void {
+    this.db.run(`update notification_devices set disabled_at = ?, updated_at = ? where push_token = ?`, [now, now, pushToken]);
+    this.persist();
+  }
+
+  setNotificationThreadPreference(deviceId: string, threadId: string, idleEnabled: boolean, now: string): boolean {
+    if (!this.getNotificationDevice(deviceId)) {
+      return false;
+    }
+    this.db.run(
+      `insert into notification_thread_preferences (device_id, thread_id, idle_enabled, updated_at)
+       values (?, ?, ?, ?)
+       on conflict(device_id, thread_id) do update
+          set idle_enabled = excluded.idle_enabled,
+              updated_at = excluded.updated_at`,
+      [deviceId, threadId, idleEnabled ? 1 : 0, now]
+    );
+    this.persist();
+    return true;
+  }
+
+  listNotificationIdleThreadIds(deviceId: string): string[] {
+    const results = this.db.exec(
+      `select thread_id
+         from notification_thread_preferences
+        where device_id = ? and idle_enabled = 1
+        order by updated_at desc`,
+      [deviceId]
+    );
+    return (results[0]?.values ?? []).map((row) => String(row[0]));
+  }
+
+  listNotificationDevicesForApprovals(): StoredNotificationDevice[] {
+    const results = this.db.exec(
+      `select id, push_token, platform, address_mode, approvals_enabled, created_at, updated_at, last_seen_at
+         from notification_devices
+        where disabled_at is null and approvals_enabled = 1
+        order by updated_at desc`
+    );
+    return this.storedDevicesFromRows(results[0]?.values ?? []);
+  }
+
+  listNotificationDevicesForIdleThread(threadId: string): StoredNotificationDevice[] {
+    const results = this.db.exec(
+      `select d.id, d.push_token, d.platform, d.address_mode, d.approvals_enabled, d.created_at, d.updated_at, d.last_seen_at
+         from notification_devices d
+         join notification_thread_preferences p on p.device_id = d.id
+        where d.disabled_at is null and p.thread_id = ? and p.idle_enabled = 1
+        order by d.updated_at desc`,
+      [threadId]
+    );
+    return this.storedDevicesFromRows(results[0]?.values ?? []);
   }
 
   listQueuedFollowUps(threadId?: string): ApprovalFollowUp[] {
@@ -252,6 +422,49 @@ export class AuditStore {
       createdAt: String(row[7]),
       sentAt: row[8] === null ? null : String(row[8])
     }));
+  }
+
+  private storedDeviceByPushToken(pushToken: string): StoredNotificationDevice | null {
+    const rows = this.db.exec(
+      `select id, push_token, platform, address_mode, approvals_enabled, created_at, updated_at, last_seen_at
+         from notification_devices
+        where push_token = ?
+        limit 1`,
+      [pushToken]
+    )[0]?.values;
+    return this.storedDeviceFromRow(rows?.[0] ?? null);
+  }
+
+  private storedDevicesFromRows(rows: unknown[][]): StoredNotificationDevice[] {
+    return rows.map((row) => this.storedDeviceFromRow(row)).filter((device): device is StoredNotificationDevice => device !== null);
+  }
+
+  private storedDeviceFromRow(row: unknown[] | null): StoredNotificationDevice | null {
+    if (!row) {
+      return null;
+    }
+    return {
+      id: String(row[0]),
+      pushToken: String(row[1]),
+      platform: String(row[2]) as NotificationDevicePlatform,
+      addressMode: String(row[3]) as NotificationAddressMode,
+      approvalsEnabled: Number(row[4]) === 1,
+      createdAt: String(row[5]),
+      updatedAt: String(row[6]),
+      lastSeenAt: String(row[7])
+    };
+  }
+
+  private publicDevice(device: StoredNotificationDevice): NotificationDevice {
+    return {
+      id: device.id,
+      platform: device.platform,
+      addressMode: device.addressMode,
+      approvalsEnabled: device.approvalsEnabled,
+      createdAt: device.createdAt,
+      updatedAt: device.updatedAt,
+      lastSeenAt: device.lastSeenAt
+    };
   }
 
   private persist(): void {

@@ -1,5 +1,5 @@
 import { useState, type PropsWithChildren } from "react";
-import { Pin } from "lucide-react-native";
+import { Bell, Pin } from "lucide-react-native";
 import {
   ActivityIndicator,
   Pressable,
@@ -11,6 +11,7 @@ import {
   type StyleProp,
   type ViewStyle
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ApprovalDecisionKind, ApprovalHistoryItem, ApprovalRequest, Thread, TurnItem } from "@codexbutler/shared";
 
 export const colors = {
@@ -26,7 +27,9 @@ export const colors = {
 };
 
 export function Screen({ children }: PropsWithChildren) {
-  return <View style={styles.screen}>{children}</View>;
+  const insets = useSafeAreaInsets();
+
+  return <View style={[styles.screen, { paddingBottom: 16 + insets.bottom }]}>{children}</View>;
 }
 
 export function LoadingState() {
@@ -147,18 +150,23 @@ export function ThreadRow({
   thread,
   compact = false,
   pinned = false,
+  notificationsEnabled = false,
   onPress,
-  onTogglePin
+  onTogglePin,
+  onToggleNotifications
 }: {
   thread: Thread;
   compact?: boolean;
   pinned?: boolean;
+  notificationsEnabled?: boolean;
   onPress?: () => void;
   onTogglePin?: () => void;
+  onToggleNotifications?: () => void;
 }) {
   const urgent = thread.status === "waitingOnApproval" || thread.hasPendingApproval;
+  const hasActions = Boolean(onTogglePin || onToggleNotifications);
   const content = (
-    <View style={[styles.threadContent, compact && styles.compactThreadContent, onTogglePin && styles.threadContentWithPin]}>
+    <View style={[styles.threadContent, compact && styles.compactThreadContent, hasActions && styles.threadContentWithActions]}>
       <View style={styles.headerRow}>
         <Text style={[styles.rowTitle, { flex: 1 }]} numberOfLines={2}>
           {thread.title}
@@ -187,15 +195,33 @@ export function ThreadRow({
       ) : (
         content
       )}
-      {onTogglePin ? (
-        <Pressable
-          accessibilityLabel={pinned ? "Unpin thread" : "Pin thread"}
-          accessibilityRole="button"
-          onPress={onTogglePin}
-          style={({ pressed }) => [styles.pinButton, pinned && styles.pinnedPinButton, pressed && styles.buttonPressed]}
-        >
-          <Pin color={pinned ? colors.accent : colors.muted} fill={pinned ? colors.accent : "transparent"} size={18} />
-        </Pressable>
+      {hasActions ? (
+        <View style={styles.threadActions}>
+          {onTogglePin ? (
+            <Pressable
+              accessibilityLabel={pinned ? "Unpin thread" : "Pin thread"}
+              accessibilityRole="button"
+              onPress={onTogglePin}
+              style={({ pressed }) => [styles.threadActionButton, pinned && styles.selectedThreadActionButton, pressed && styles.buttonPressed]}
+            >
+              <Pin color={pinned ? colors.accent : colors.muted} fill={pinned ? colors.accent : "transparent"} size={18} />
+            </Pressable>
+          ) : null}
+          {onToggleNotifications ? (
+            <Pressable
+              accessibilityLabel={notificationsEnabled ? "Disable thread notifications" : "Enable thread notifications"}
+              accessibilityRole="button"
+              onPress={onToggleNotifications}
+              style={({ pressed }) => [
+                styles.threadActionButton,
+                notificationsEnabled && styles.selectedThreadActionButton,
+                pressed && styles.buttonPressed
+              ]}
+            >
+              <Bell color={notificationsEnabled ? colors.accent : colors.muted} size={18} />
+            </Pressable>
+          ) : null}
+        </View>
       ) : null}
     </View>
   );
@@ -381,13 +407,17 @@ export const styles = StyleSheet.create({
     padding: 12,
     gap: 6
   },
-  threadContentWithPin: {
-    paddingRight: 50
+  threadContentWithActions: {
+    paddingRight: 92
   },
-  pinButton: {
+  threadActions: {
     position: "absolute",
     right: 8,
     top: 8,
+    flexDirection: "row",
+    gap: 8
+  },
+  threadActionButton: {
     width: 34,
     height: 34,
     borderRadius: 8,
@@ -397,7 +427,7 @@ export const styles = StyleSheet.create({
     borderColor: colors.border,
     borderWidth: StyleSheet.hairlineWidth
   },
-  pinnedPinButton: {
+  selectedThreadActionButton: {
     backgroundColor: "#dcefe9",
     borderColor: "#b7d8cc"
   },

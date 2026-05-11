@@ -16,6 +16,7 @@ Working today:
 - create backend-owned Codex threads from the mobile Inbox;
 - choose the backend default project folder, a known project folder, or a custom absolute host path for new mobile-created threads;
 - pin important threads locally on the phone;
+- receive opaque mobile notifications for new approval requests, and optionally for watched threads that become idle;
 - run the whole app in mock mode for mobile UI and approval-flow testing.
 
 Not working as a dependable remote-control path yet:
@@ -63,7 +64,15 @@ Thread detail shows the thread title, status, summary, cwd, a readable message t
 
 Pinned threads are stored locally on the phone with AsyncStorage. They are a mobile convenience only; pinning does not modify Codex state on the host.
 
-Settings stores the backend URL and bearer token, tests the connection, and refreshes session diagnostics so connection-mode problems are visible without reading backend logs.
+Thread notification preferences are controlled from the phone and synced to the backend. Approval notifications are enabled by default for registered devices. Tapping the bell on a thread opts that thread into idle notifications as well, so the phone can alert when Codex is ready for follow-up.
+
+Notification copy is deliberately opaque. The only delivered text is the configured butler address, such as `Monsieur ? Your attention please.`, `Madame ? Your attention please.`, or `Your attention please.` No command, cwd, thread title, approval id, message text, or event type is included in local notifications or push payloads.
+
+CodexButler uses local Expo notifications while the app is connected over SSE, and registers an Expo push token with the backend for delivery when the app is backgrounded or suspended. Push delivery uses Expo's push service as a transport relay; Codex execution, approval decisions, credentials, and event details stay on the Codex host.
+
+Expo Go can warn that `expo-notifications` is limited. Validate notification behavior in a development build or the release-variant alpha APK.
+
+Settings stores the backend URL and bearer token, tests the connection, refreshes session diagnostics, and lets the user choose `Monsieur`, `Madame`, or `Non genré` notification address text.
 
 ## Thread Creation and Prompt Push
 
@@ -96,6 +105,7 @@ For real remote use, run CodexButler on a trusted always-on host where Codex is 
 7. Point the mobile app at the private VPN or tunnel URL for the CodexButler backend, not at Codex app-server.
 8. Start or resume work from the phone through CodexButler when you need mobile approval handling.
 9. Keep Codex Desktop open only as an observer unless `CODEX_CONNECTION_MODE=proxy` reports a working bridge on that host.
+10. Allow outbound HTTPS from the backend host to Expo's push service when push notifications are desired.
 
 Do not forward port `4545` directly from the public internet to the backend. Do not expose raw Codex app-server endpoints. If using an HTTPS tunnel, require tunnel authentication in addition to the CodexButler bearer token whenever the tunnel provider supports it.
 
@@ -198,3 +208,4 @@ pnpm test
 - Keep `CODEX_CONNECTION_MODE=child` for the supported mobile-owned approval flow.
 - Do not expose Codex app-server directly to the internet.
 - Do not publish a backend URL protected only by the bearer token on the open internet.
+- Notification push payloads are intentionally generic and must not include command text, cwd, thread names, approval ids, prompts, summaries, or event-specific metadata.
