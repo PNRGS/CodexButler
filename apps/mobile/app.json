@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "CodexButler",
+    "name": "CodexButler Alpha",
     "slug": "codexbutler",
     "version": "0.1.0",
     "orientation": "portrait",
@@ -17,8 +17,23 @@
       "supportsTablet": false
     },
     "android": {
+      "package": "app.codexbutler.mobile",
+      "icon": "./assets/icon.png",
+      "versionCode": 1,
+      "allowBackup": false,
+      "softwareKeyboardLayoutMode": "resize",
+      "permissions": [],
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.USE_BIOMETRIC",
+        "android.permission.USE_FINGERPRINT",
+        "android.permission.VIBRATE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
       "adaptiveIcon": {
-        "backgroundColor": "#0f172a"
+        "foregroundImage": "./assets/adaptive-icon-foreground.png",
+        "backgroundColor": "#EAF7FF"
       }
     }
   }

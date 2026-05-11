@@ -277,6 +277,8 @@ Current setup:
 - mobile dev: `pnpm dev:mobile`
 - full dev: `pnpm dev`
 - seed mock approval: `pnpm mock:approval`
+- local Android alpha APK: `pnpm --filter @codexbutler/mobile build:android:release` (generates ignored `apps/mobile/android/` and release APK output)
+- GitHub APK release: push a `v*` tag to run `.github/workflows/android-apk-alpha.yml`; the workflow builds a release-variant alpha APK and creates/updates a draft release
 - lint/type/tests: `pnpm lint`, `pnpm typecheck`, `pnpm test`
 - backend env: copy `.env.example` to `.env`; use `CODEX_MOCK_MODE=true` for local UI development, then `CODEX_MOCK_MODE=false` to connect to Codex; set `CODEX_DEFAULT_CWD` to the project directory used for mobile-created threads; use `BACKEND_ALLOWED_ORIGINS` only for browser clients that need CORS while `BACKEND_PUBLIC_BIND=true`
 - Codex connection mode: `CODEX_CONNECTION_MODE=child` starts a CodexButler-owned `codex app-server`; `CODEX_CONNECTION_MODE=proxy` tries `codex app-server proxy` and reports `unavailable` in authenticated `/session` when no Desktop control socket is exposed.

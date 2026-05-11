@@ -11,6 +11,8 @@ coverage/
 .expo/
 .expo-shared/
 web-build/
+apps/mobile/android/
+apps/mobile/ios/
 
 # Local environment and secrets
 .env
@@ -28,6 +30,8 @@ GoogleService-Info.plist
 
 # Runtime data, logs, and local databases
 *.log
+*.apk
+*.aab
 *.sqlite
 *.sqlite-*
 *.db
@@ -36,6 +40,7 @@ concierge-mobile-approval-test.txt
 
 # Generated protocol snapshots
 .codex-protocol/
+artifacts/
 
 # OS/editor noise
 .DS_Store

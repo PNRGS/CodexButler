@@ -109,6 +109,43 @@ Operational recommendations:
 - watch backend logs for auth failures, approval decisions, rule creation, and Codex session errors;
 - treat `proxy` and `codex remote-control` as diagnostic experiments until the local Codex install exposes a documented compatible transport.
 
+## Android Alpha APK
+
+The first GitHub APK is intended as a release-variant alpha for trusted testers. It is suitable for side-loading and MVP validation, not for Play Store distribution.
+
+Mobile app identity for this alpha:
+
+- Android app id: `app.codexbutler.mobile`
+- Android versionCode: `1`
+- User-facing app name: `CodexButler Alpha`
+
+Local alpha APK build:
+
+Prerequisites: JDK 17 and Android SDK/Gradle tooling available on `PATH`.
+
+```bash
+pnpm --filter @codexbutler/mobile build:android:release
+```
+
+The APK is generated at:
+
+```text
+apps/mobile/android/app/build/outputs/apk/release/app-release.apk
+```
+
+The generated native Android project is ignored by git because this repo currently stays Expo-managed. To regenerate from a clean state, remove `apps/mobile/android` and rerun the build command.
+
+GitHub build:
+
+```bash
+git tag v0.1.0-alpha.1
+git push origin v0.1.0-alpha.1
+```
+
+Pushing a `v*` tag runs `.github/workflows/android-apk-alpha.yml`. The workflow runs lint, typecheck, tests, installs the required Android SDK packages, generates the Android project, builds a release-variant alpha APK, uploads it as a workflow artifact, and attaches it to a draft GitHub Release using `docs/releases/v0.1.0-alpha.md`.
+
+For a manual build without creating a tag, run the `Android APK Alpha` workflow from the GitHub Actions UI. Manual runs upload the APK as an artifact only.
+
 ## Mock Approval Cases
 
 When the backend runs with `CODEX_MOCK_MODE=true`, you can seed one pending approval for repeated Android testing:

@@ -217,6 +217,32 @@ describe("backend server", () => {
     auditStore.close();
   });
 
+  it("allows unauthenticated CORS preflight requests", async () => {
+    const temp = mkdtempSync(join(tmpdir(), "codexbutler-"));
+    const config = testConfig(join(temp, "test.sqlite"));
+    const auditStore = await AuditStore.open(config.SQLITE_PATH);
+    const codex = new MockCodexRepository();
+    await codex.connect();
+    const app = buildServer({ config, codex, auditStore });
+
+    const preflight = await app.inject({
+      method: "OPTIONS",
+      url: "/threads?limit=50",
+      headers: {
+        origin: "http://localhost:8082",
+        "access-control-request-method": "GET",
+        "access-control-request-headers": "authorization,content-type"
+      }
+    });
+
+    expect(preflight.statusCode).toBe(204);
+    expect(preflight.headers["access-control-allow-origin"]).toBe("http://localhost:8082");
+    expect(preflight.headers["access-control-allow-headers"]).toContain("authorization");
+
+    await app.close();
+    auditStore.close();
+  });
+
   it("records and resolves an approval decision", async () => {
     const temp = mkdtempSync(join(tmpdir(), "codexbutler-"));
     const config = testConfig(join(temp, "test.sqlite"));

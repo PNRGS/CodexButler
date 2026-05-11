@@ -5,9 +5,12 @@
   "main": "expo-router/entry",
   "scripts": {
     "dev": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "web": "expo start --web",
+    "prebuild:android": "expo prebuild --platform android --no-install",
+    "build:android:debug": "expo prebuild --platform android --no-install && cd android && ./gradlew assembleDebug",
+    "build:android:release": "NODE_ENV=production expo prebuild --platform android --no-install && cd android && NODE_ENV=production ./gradlew assembleRelease",
     "lint": "pnpm --filter @codexbutler/shared build && tsc -p tsconfig.json --noEmit",
     "typecheck": "pnpm --filter @codexbutler/shared build && tsc -p tsconfig.json --noEmit",
     "test": "pnpm --filter @codexbutler/shared build && tsc -p tsconfig.json --noEmit"

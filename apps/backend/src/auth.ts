@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 
 export function registerAuth(app: FastifyInstance, token: string): void {
   app.addHook("onRequest", async (request, reply) => {
-    if (request.url === "/health") {
+    if (request.method === "OPTIONS" || request.url === "/health") {
       return;
     }
 

@@ -3,11 +3,11 @@ import { Pin } from "lucide-react-native";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, View } from "react-native";
-import type { Turn, TurnItem } from "@codexbutler/shared";
-import { getThread, listTurns, sendPrompt } from "../../src/api";
+import type { ApprovalDecisionKind, ApprovalRequest, Turn, TurnItem } from "@codexbutler/shared";
+import { decideApproval, getThread, listApprovals, listTurns, sendPrompt } from "../../src/api";
 import { usePinnedThreads } from "../../src/pinnedThreads";
 import { useSettings } from "../../src/settings";
-import { EmptyState, LoadingState, PrimaryButton, Screen, StatusPill, TimelineItem, colors, styles } from "../../src/ui";
+import { ApprovalCard, EmptyState, LoadingState, PrimaryButton, Screen, StatusPill, TimelineItem, colors, styles } from "../../src/ui";
 import { useCodexButlerEvents } from "../../src/useCodexButlerEvents";
 
 interface TimelineEntry extends TurnItem {
@@ -16,6 +16,20 @@ interface TimelineEntry extends TurnItem {
   turnIndex: number;
   itemIndex: number;
 }
+
+type ConversationEntry =
+  | {
+      kind: "timeline";
+      key: string;
+      sortTime: number;
+      item: TimelineEntry;
+    }
+  | {
+      kind: "approval";
+      key: string;
+      sortTime: number;
+      approval: ApprovalRequest;
+    };
 
 function timestamp(value: string | null): number {
   if (!value) {
@@ -47,12 +61,29 @@ function orderedTimelineItems(turns: Turn[]): TimelineEntry[] {
     );
 }
 
+function orderedConversationEntries(items: TimelineEntry[], approvals: ApprovalRequest[]): ConversationEntry[] {
+  return [
+    ...items.map((item) => ({
+      kind: "timeline" as const,
+      key: `item:${item.turnId}:${item.id}`,
+      sortTime: timestamp(item.createdAt) || timestamp(item.turnCreatedAt),
+      item
+    })),
+    ...approvals.map((approval) => ({
+      kind: "approval" as const,
+      key: `approval:${approval.id}`,
+      sortTime: timestamp(approval.requestedAt),
+      approval
+    }))
+  ].sort((a, b) => a.sortTime - b.sortTime || (a.kind === "approval" ? 1 : 0) - (b.kind === "approval" ? 1 : 0));
+}
+
 export default function ThreadDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const settings = useSettings();
   const pinnedThreads = usePinnedThreads();
   const queryClient = useQueryClient();
-  const listRef = useRef<FlatList<TimelineEntry>>(null);
+  const listRef = useRef<FlatList<ConversationEntry>>(null);
   const [promptText, setPromptText] = useState("");
   useCodexButlerEvents();
   const thread = useQuery({
@@ -73,11 +104,48 @@ export default function ThreadDetailScreen() {
       return hasActiveTurn ? 2000 : false;
     }
   });
+  const approvals = useQuery({
+    queryKey: ["approvals", settings.backendUrl],
+    enabled: settings.ready && Boolean(id),
+    queryFn: () => listApprovals(settings),
+    refetchInterval: (query) => {
+      const hasThreadApproval = query.state.data?.data.some((approval) => approval.threadId === id);
+      return hasThreadApproval || thread.data?.status === "waitingOnApproval" || thread.data?.hasPendingApproval ? 2000 : false;
+    }
+  });
   const promptMutation = useMutation({
     mutationFn: () => sendPrompt(settings, id, promptText),
     onSuccess: async () => {
       setPromptText("");
       await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["approvals"] }),
+        queryClient.invalidateQueries({ queryKey: ["threads"] }),
+        queryClient.invalidateQueries({ queryKey: ["thread", id] }),
+        queryClient.invalidateQueries({ queryKey: ["turns", id] })
+      ]);
+    }
+  });
+  const decisionMutation = useMutation({
+    mutationFn: ({
+      approval,
+      decision,
+      followUpText
+    }: {
+      approval: ApprovalRequest;
+      decision: ApprovalDecisionKind;
+      followUpText?: string;
+    }) =>
+      decideApproval(
+        settings,
+        approval.id,
+        decision,
+        decision === "alwaysAllowRule" ? approval.proposedRule ?? undefined : undefined,
+        followUpText
+      ),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["approvals"] }),
+        queryClient.invalidateQueries({ queryKey: ["approvals", "recent"] }),
         queryClient.invalidateQueries({ queryKey: ["threads"] }),
         queryClient.invalidateQueries({ queryKey: ["thread", id] }),
         queryClient.invalidateQueries({ queryKey: ["turns", id] })
@@ -85,9 +153,17 @@ export default function ThreadDetailScreen() {
     }
   });
   const timelineItems = useMemo(() => orderedTimelineItems(turns.data?.data ?? []), [turns.data?.data]);
+  const threadApprovals = useMemo(
+    () => (approvals.data?.data ?? []).filter((approval) => approval.threadId === id),
+    [approvals.data?.data, id]
+  );
+  const conversationEntries = useMemo(
+    () => orderedConversationEntries(timelineItems, threadApprovals),
+    [timelineItems, threadApprovals]
+  );
 
   useEffect(() => {
-    if (timelineItems.length === 0) {
+    if (conversationEntries.length === 0) {
       return;
     }
 
@@ -95,7 +171,7 @@ export default function ThreadDetailScreen() {
       listRef.current?.scrollToEnd({ animated: false });
     });
     return () => cancelAnimationFrame(frame);
-  }, [id, timelineItems.length]);
+  }, [id, conversationEntries.length]);
 
   if (!settings.ready || thread.isLoading || turns.isLoading) {
     return <LoadingState />;
@@ -127,13 +203,15 @@ export default function ThreadDetailScreen() {
     <Screen>
       <Stack.Screen options={{ title: thread.data.title }} />
       <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={88}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 88 : 0}
         style={threadStyles.layout}
       >
-        <View style={styles.row}>
+        <View style={styles.compactRow}>
           <View style={styles.headerRow}>
-            <Text style={[styles.title, { fontSize: 22, lineHeight: 28, flex: 1 }]}>{thread.data.title}</Text>
+            <Text ellipsizeMode="tail" numberOfLines={2} style={[styles.title, threadStyles.threadTitle]}>
+              {thread.data.title}
+            </Text>
             <View style={threadStyles.headerActions}>
               <Pressable
                 accessibilityLabel={pinned ? "Unpin thread" : "Pin thread"}
@@ -156,11 +234,23 @@ export default function ThreadDetailScreen() {
 
         <FlatList
           ref={listRef}
-          contentContainerStyle={timelineItems.length ? threadStyles.messagesContent : threadStyles.emptyMessagesContent}
-          data={timelineItems}
-          keyExtractor={(item) => `${item.turnId}:${item.id}`}
+          contentContainerStyle={conversationEntries.length ? threadStyles.messagesContent : threadStyles.emptyMessagesContent}
+          data={conversationEntries}
+          keyExtractor={(entry) => entry.key}
           ListEmptyComponent={<EmptyState title="No recent turns" body="The thread has no readable turn history yet." />}
-          renderItem={({ item }) => <TimelineItem item={item} />}
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          keyboardShouldPersistTaps="handled"
+          renderItem={({ item }) =>
+            item.kind === "timeline" ? (
+              <TimelineItem item={item.item} />
+            ) : (
+              <ApprovalCard
+                approval={item.approval}
+                pending={decisionMutation.isPending}
+                onDecision={(approval, decision, followUpText) => decisionMutation.mutate({ approval, decision, followUpText })}
+              />
+            )
+          }
           style={threadStyles.messagesList}
         />
 
@@ -176,6 +266,7 @@ export default function ThreadDetailScreen() {
           {threadBusy ? <Text style={styles.muted}>This thread is busy or waiting on approval.</Text> : null}
           {promptTooLong ? <Text style={[styles.muted, { color: colors.danger }]}>Prompts are limited to 4,000 characters.</Text> : null}
           {promptMutation.isError ? <Text style={[styles.muted, { color: colors.danger }]}>{promptMutation.error.message}</Text> : null}
+          {decisionMutation.isError ? <Text style={[styles.muted, { color: colors.danger }]}>{decisionMutation.error.message}</Text> : null}
           <View style={styles.headerRow}>
             <Text style={styles.muted}>{trimmedPrompt.length}/4000</Text>
             <PrimaryButton disabled={!canSendPrompt} onPress={() => promptMutation.mutate()} style={{ minWidth: 92 }}>
@@ -192,6 +283,11 @@ const threadStyles = StyleSheet.create({
   layout: {
     flex: 1,
     gap: 12
+  },
+  threadTitle: {
+    flex: 1,
+    fontSize: 18,
+    lineHeight: 23
   },
   headerActions: {
     flexDirection: "row",
