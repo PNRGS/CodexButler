@@ -25,6 +25,16 @@ Not working as a dependable remote-control path yet:
 - using `codex remote-control` as CodexButler's backend transport;
 - exposing CodexButler as a public internet service without a private network or authenticated tunnel.
 
+## Screenshots
+
+| Inbox | Thread detail |
+| --- | --- |
+| <img src="docs/screenshots/inbox.png" width="260" alt="CodexButler mobile Inbox showing new thread controls and recent threads" /> | <img src="docs/screenshots/thread-detail.png" width="260" alt="CodexButler mobile thread detail with recent Codex turns" /> |
+
+| Prompt composer | Opaque notifications |
+| --- | --- |
+| <img src="docs/screenshots/thread-composer.png" width="260" alt="CodexButler mobile prompt composer with the keyboard open" /> | <img src="docs/screenshots/notifications.png" width="260" alt="Android notification shade showing generic CodexButler notifications" /> |
+
 ## Structure
 
 - `apps/backend`: Fastify API that mediates all Codex access.
